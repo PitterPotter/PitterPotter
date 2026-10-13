@@ -81,7 +81,6 @@ export default function Footer({ setCurrentPage, adminMode = false }: FooterProp
         <div className="border-t border-[#1B2D3C]/10 pt-6 text-center text-xs text-[#1B2D3C]/40 space-y-1">
           <p><EditableText contentKey="footer_copyright" page="footer" defaultValue="© 2026 Pitter Potter. All rights reserved." adminMode={adminMode} className="text-xs text-[#1B2D3C]/40" /></p>
           <p><EditableText contentKey="footer_company" page="footer" defaultValue="PITTER POTTER LIMITED | Company number 10637179" adminMode={adminMode} className="text-xs text-[#1B2D3C]/40" /></p>
-          <p><EditableText contentKey="footer_made_in" page="footer" defaultValue="Made in London" adminMode={adminMode} className="text-xs text-[#1B2D3C]/40" /></p>
           <div className="flex items-center justify-center gap-4 mt-2">
             <button onClick={() => handlePageLink('privacy-policy')} className="text-[#1B2D3C]/40 hover:text-[#1B2D3C] transition-colors">Privacy Policy</button>
             <span className="text-[#1B2D3C]/20">|</span>

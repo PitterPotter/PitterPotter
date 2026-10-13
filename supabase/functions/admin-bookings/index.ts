@@ -672,6 +672,96 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === 'paymentDetails') {
+      if (!isNonEmptyString(id)) {
+        return new Response(JSON.stringify({ error: 'Invalid booking id' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: bookingRow } = await supabase
+        .from('bookings')
+        .select('studio, stripe_payment_intent_id')
+        .eq('booking_id', id)
+        .single();
+      if (!bookingRow) {
+        return new Response(JSON.stringify({ error: 'Booking not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!isSuperAdmin && staff.allowed_studios && staff.allowed_studios.length > 0 && !staff.allowed_studios.includes(bookingRow.studio)) {
+        return new Response(JSON.stringify({ error: 'You can only view bookings for your assigned studio' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      let stripeId = bookingRow.stripe_payment_intent_id as string | null;
+      if (!stripeId) {
+        return new Response(JSON.stringify({ error: 'No Stripe payment recorded for this booking' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: modeSetting } = await supabase.from('settings').select('value').eq('key', 'stripe_mode').single();
+      const isLive = modeSetting?.value === 'live';
+      const stripeKey = isLive ? Deno.env.get('STRIPE_SECRET_KEY_LIVE') : Deno.env.get('STRIPE_SECRET_KEY_SANDBOX');
+      if (!stripeKey) {
+        return new Response(JSON.stringify({ error: 'Stripe not configured' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const stripeFetch = async (path: string) => {
+        const res = await fetch(`https://api.stripe.com/v1${path}`, {
+          headers: { 'Authorization': `Bearer ${stripeKey}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error?.message || 'Stripe request failed');
+        return data;
+      };
+
+      // Older rows may store a Checkout Session id (cs_...) instead of a
+      // PaymentIntent id — resolve it to the payment intent first.
+      if (stripeId.startsWith('cs_')) {
+        const session = await stripeFetch(`/checkout/sessions/${stripeId}`);
+        stripeId = session.payment_intent as string;
+        if (!stripeId) {
+          return new Response(JSON.stringify({ error: 'No payment on this checkout session' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      const pi = await stripeFetch(`/payment_intents/${stripeId}?expand[]=latest_charge&expand[]=latest_charge.payment_method_details`);
+      const charge = pi.latest_charge && typeof pi.latest_charge === 'object' ? pi.latest_charge : null;
+      const card = charge?.payment_method_details?.card;
+
+      return new Response(JSON.stringify({
+        id: pi.id,
+        status: pi.status,
+        amount: typeof pi.amount === 'number' ? pi.amount / 100 : null,
+        amountReceived: typeof pi.amount_received === 'number' ? pi.amount_received / 100 : null,
+        currency: pi.currency,
+        created: pi.created ? new Date(pi.created * 1000).toISOString() : null,
+        description: pi.description || charge?.description || null,
+        paymentType: pi.metadata?.type || null,
+        paymentMethod: charge?.payment_method_details?.type || null,
+        cardBrand: card?.brand || null,
+        cardLast4: card?.last4 || null,
+        cardCountry: card?.country || null,
+        receiptUrl: charge?.receipt_url || null,
+        amountRefunded: charge?.amount_refunded ? charge.amount_refunded / 100 : 0,
+        refunded: !!charge?.refunded,
+        paid: charge?.paid ?? pi.status === 'succeeded',
+        livemode: pi.livemode,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'updateCollection') {
       if (!isSuperAdmin && !staff.can_edit_bookings) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), {

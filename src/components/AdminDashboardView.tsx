@@ -6,12 +6,13 @@ import WimbledonFloorPlan from './WimbledonFloorPlan';
 import PutneyFloorPlan from './PutneyFloorPlan';
 import { allocateResources as allocateResourcesFromBookings, formatResources, isPartySessionType } from '../lib/allocation';
 import { findAvailablePutneyTable, findMultiplePutneyTables } from './PutneyFloorPlan';
-import { Calendar, Clock, Users, Mail, Phone, LogOut, Trash2, CheckCircle, XCircle, Plus, Copy, Inbox, Gift, ChevronUp, ChevronDown, X as XIcon, Pencil, Lock, Camera, ScanLine, AlertCircle, Package, Check, Wine } from 'lucide-react';
+import { Calendar, Clock, Users, Mail, Phone, LogOut, Trash2, CheckCircle, XCircle, Plus, Copy, Inbox, Gift, ChevronUp, ChevronDown, X as XIcon, Pencil, Lock, Camera, ScanLine, AlertCircle, Package, Check, Wine, Loader2 } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
 import { format, isSameDay, parseISO, getDay } from 'date-fns';
 import { BookingInquiry, GiftCard, Staff, AuditLog, GiftCardApiRow, StaffApiRow, EmailTemplate, SMSTemplate, EmailLog } from '../types';
 import { supabase, isSupabaseEnabled } from '../lib/supabase';
-import { loadBookings, createBooking, updateBooking, patchBooking, updateBookingStatus, deleteBooking, getRemainingCapacity, sendDepositLink } from '../lib/bookings';
+import { loadBookings, createBooking, updateBooking, patchBooking, updateBookingStatus, deleteBooking, getRemainingCapacity, sendDepositLink, getPaymentDetails } from '../lib/bookings';
+import type { StripePaymentDetails } from '../lib/bookings';
 import { compressImage } from '../lib/imageCompression';
 import QRScanner from './QRScanner';
 import { getAllSlots, getSlots, setSlots, DEFAULT_SLOTS, SlotSessionType, Studio, TimeSlotsData, getStudioSlots, sortSlots, loadSlotsFromSupabase, saveSlotsToSupabase, DayType } from '../lib/timeSlots';
@@ -204,6 +205,10 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [drawerBooking, setDrawerBooking] = useState<BookingInquiry | null>(null);
   const [sendingDepositLink, setSendingDepositLink] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState<StripePaymentDetails | null>(null);
+  const [paymentDetailsLoading, setPaymentDetailsLoading] = useState(false);
+  const [paymentDetailsError, setPaymentDetailsError] = useState('');
   const [staffNotesDraft, setStaffNotesDraft] = useState('');
   const [drawerCommLogs, setDrawerCommLogs] = useState<EmailLog[]>([]);
   const [drawerCommLoading, setDrawerCommLoading] = useState(false);
@@ -1996,6 +2001,21 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     }
   };
 
+  const handleViewPaymentDetails = async () => {
+    if (!drawerBooking) return;
+    setShowPaymentModal(true);
+    setPaymentDetailsLoading(true);
+    setPaymentDetailsError('');
+    setPaymentDetails(null);
+    try {
+      setPaymentDetails(await getPaymentDetails(drawerBooking.id, staff));
+    } catch (err) {
+      setPaymentDetailsError(err instanceof Error ? err.message : 'Failed to load payment details');
+    } finally {
+      setPaymentDetailsLoading(false);
+    }
+  };
+
   const saveNewBooking = async () => {
     if (!newBooking.name || !newBooking.date || !newBooking.time) {
       showToast('Please fill in name, date, and time', 'error');
@@ -3656,6 +3676,99 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           </>
         )}
       </div>
+
+      {/* Payment Details Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60] sm:p-6">
+          <div className="bg-white p-6 border border-[#1B2D3C]/20 max-w-md w-full space-y-4 shadow-lg max-h-[90vh] overflow-y-auto sm:rounded-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading text-xl font-black text-[#1B2D3C]">Stripe Payment</h3>
+              <button onClick={() => setShowPaymentModal(false)} className="p-1.5 rounded-full hover:bg-[#D6E2E9] transition-colors cursor-pointer">
+                <XIcon className="w-5 h-5 text-[#1B2D3C]/60" />
+              </button>
+            </div>
+            {paymentDetailsLoading ? (
+              <div className="py-8 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-[#1B2D3C]/40" />
+              </div>
+            ) : paymentDetailsError ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700 text-center">
+                {paymentDetailsError}
+              </div>
+            ) : paymentDetails && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-full ${
+                    paymentDetails.refunded ? 'bg-red-100 text-red-700'
+                    : paymentDetails.status === 'succeeded' ? 'bg-emerald-100 text-emerald-700'
+                    : paymentDetails.status === 'requires_payment_method' || paymentDetails.status === 'canceled' ? 'bg-red-100 text-red-700'
+                    : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {paymentDetails.refunded ? 'Refunded' : paymentDetails.status === 'succeeded' ? 'Succeeded' : paymentDetails.status.replace(/_/g, ' ')}
+                  </span>
+                  {!paymentDetails.livemode && (
+                    <span className="px-2 py-1 text-[9px] font-black uppercase tracking-wider rounded bg-amber-50 text-amber-700 border border-amber-200">Test mode</span>
+                  )}
+                </div>
+                <div className="text-center py-3 bg-[#F8FAFA] rounded-lg">
+                  <p className="font-heading text-3xl font-black text-[#1B2D3C]">
+                    £{(paymentDetails.amountReceived ?? paymentDetails.amount ?? 0).toFixed(2)}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-wider text-[#1B2D3C]/50 mt-1">
+                    {paymentDetails.paymentType === 'party_deposit' ? 'Party deposit'
+                      : paymentDetails.paymentType === 'party_final_balance' ? 'Party final balance'
+                      : paymentDetails.description || 'Payment'}
+                  </p>
+                </div>
+                <div className="space-y-2 text-xs font-semibold text-[#1B2D3C]">
+                  {paymentDetails.created && (
+                    <div className="flex justify-between">
+                      <span className="text-[#1B2D3C]/50">Paid</span>
+                      <span>{new Date(paymentDetails.created).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                    </div>
+                  )}
+                  {(paymentDetails.cardBrand || paymentDetails.cardLast4) && (
+                    <div className="flex justify-between">
+                      <span className="text-[#1B2D3C]/50">Card</span>
+                      <span className="capitalize">{paymentDetails.cardBrand} ···· {paymentDetails.cardLast4}</span>
+                    </div>
+                  )}
+                  {paymentDetails.paymentMethod && paymentDetails.paymentMethod !== 'card' && (
+                    <div className="flex justify-between">
+                      <span className="text-[#1B2D3C]/50">Method</span>
+                      <span className="capitalize">{paymentDetails.paymentMethod.replace(/_/g, ' ')}</span>
+                    </div>
+                  )}
+                  {paymentDetails.amountRefunded > 0 && (
+                    <div className="flex justify-between text-red-700">
+                      <span>Refunded</span>
+                      <span>−£{paymentDetails.amountRefunded.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-start gap-3">
+                    <span className="text-[#1B2D3C]/50 shrink-0">Reference</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(paymentDetails.id); showToast('Copied', 'success'); }}
+                      className="font-mono text-[10px] break-all text-right hover:text-[#1B2D3C]/70 cursor-pointer"
+                      title="Click to copy"
+                    >{paymentDetails.id}</button>
+                  </div>
+                </div>
+                {paymentDetails.receiptUrl && (
+                  <a
+                    href={paymentDetails.receiptUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-full px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C] bg-[#DBE7E4] rounded-lg hover:bg-[#D6E2E9] transition-all"
+                  >
+                    View receipt
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Add Booking Modal */}
       {showAddModal && (
@@ -5960,15 +6073,12 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                     <p className="text-[10px] text-[#1B2D3C]/60 font-medium">Gift card: <span className="font-mono text-[#1B2D3C]">{drawerBooking.giftCardCode}</span></p>
                   )}
                   {drawerBooking.stripePaymentIntentId && (
-                    <div className="text-[10px] text-[#1B2D3C]/60 font-medium space-y-0.5">
-                      <p className="font-mono break-all">{drawerBooking.stripePaymentIntentId}</p>
-                      <a
-                        href={`https://dashboard.stripe.com/payments/${drawerBooking.stripePaymentIntentId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >View in Stripe</a>
-                    </div>
+                    <button
+                      onClick={handleViewPaymentDetails}
+                      className="w-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C] bg-white border border-[#1B2D3C]/20 rounded-lg hover:bg-[#D6E2E9]/40 transition-all cursor-pointer"
+                    >
+                      View Stripe payment details
+                    </button>
                   )}
                   {drawerBooking.paymentLinkUrl && (
                     <div className="text-[10px] text-[#1B2D3C]/60 font-medium space-y-0.5">

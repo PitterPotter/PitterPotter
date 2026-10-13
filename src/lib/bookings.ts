@@ -296,6 +296,50 @@ export async function sendDepositLink(id: string, staff?: Staff | null): Promise
   }
 }
 
+export interface StripePaymentDetails {
+  id: string;
+  status: string;
+  amount: number | null;
+  amountReceived: number | null;
+  currency: string;
+  created: string | null;
+  description: string | null;
+  paymentType: string | null;
+  paymentMethod: string | null;
+  cardBrand: string | null;
+  cardLast4: string | null;
+  cardCountry: string | null;
+  receiptUrl: string | null;
+  amountRefunded: number;
+  refunded: boolean;
+  paid: boolean;
+  livemode: boolean;
+}
+
+export async function getPaymentDetails(id: string, staff?: Staff | null): Promise<StripePaymentDetails> {
+  if (!staff) throw new Error('Staff required');
+
+  const response = await fetch(functionUrl('admin-bookings'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      action: 'paymentDetails',
+      username: staff.username,
+      sessionToken: staff.sessionToken,
+      id,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    throw new Error(data.error || 'Failed to load payment details');
+  }
+  return data as StripePaymentDetails;
+}
+
 export async function deleteBooking(id: string, staff?: Staff | null): Promise<void> {
   if (!isSupabaseEnabled()) return;
   if (!staff) throw new Error('Staff required');

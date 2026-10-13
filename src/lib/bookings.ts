@@ -32,6 +32,8 @@ export function toBookingInquiry(row: any): BookingInquiry {
     paymentLinkSentAt: row.payment_link_sent_at || undefined,
     paymentStatus: row.payment_status || undefined,
     stripePaymentIntentId: row.stripe_payment_intent_id || undefined,
+    depositPaidAt: row.deposit_paid_at || undefined,
+    finalPaidAt: row.final_paid_at || undefined,
     managementToken: row.management_token || undefined,
     createdAt: row.created_at || undefined,
     photos: row.photos || undefined,
@@ -68,6 +70,8 @@ export function toBookingRow(booking: BookingInquiry): any {
     payment_link_sent_at: booking.paymentLinkSentAt || null,
     payment_status: booking.paymentStatus || null,
     stripe_payment_intent_id: booking.stripePaymentIntentId || null,
+    deposit_paid_at: booking.depositPaidAt || null,
+    final_paid_at: booking.finalPaidAt || null,
     photos: booking.photos || null,
     management_token: booking.managementToken || null,
     collection_status: booking.collectionStatus || null,
@@ -264,6 +268,31 @@ export async function updateBookingStatus(id: string, status: 'pending' | 'confi
   if (!response.ok || data.error) {
     console.error('Failed to update booking status:', data.error);
     throw new Error(data.error || 'Failed to update booking status');
+  }
+}
+
+export async function sendDepositLink(id: string, staff?: Staff | null): Promise<void> {
+  if (!isSupabaseEnabled()) return;
+  if (!staff) throw new Error('Staff required');
+
+  const response = await fetch(functionUrl('admin-bookings'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      action: 'sendDepositLink',
+      username: staff.username,
+      sessionToken: staff.sessionToken,
+      id,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    console.error('Failed to send deposit link:', data.error);
+    throw new Error(data.error || 'Failed to send deposit link');
   }
 }
 

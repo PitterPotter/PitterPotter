@@ -283,11 +283,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Staff auth is optional for cron-based calls, required for manual admin calls
-    let isAuthorized = false;
-    if (isNonEmptyString(username) && isNonEmptyString(sessionToken)) {
-      const staff = await verifyStaff(supabase, username, sessionToken);
-      if (staff) isAuthorized = true;
+    // Automatic final payment links are disabled — only an authenticated staff
+    // member can send this reminder manually.
+    if (!isNonEmptyString(username) || !isNonEmptyString(sessionToken)) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const staff = await verifyStaff(supabase, username, sessionToken);
+    if (!staff) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const { data: booking, error: bookingError } = await supabase
@@ -306,13 +315,6 @@ Deno.serve(async (req) => {
     if (!PARTY_TYPES.includes(booking.session_type)) {
       return new Response(JSON.stringify({ error: 'Not a party booking' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (!isAuthorized && booking.payment_status !== 'pending') {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

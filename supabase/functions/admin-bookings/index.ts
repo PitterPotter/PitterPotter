@@ -7,6 +7,95 @@ import { corsHeaders as makeCorsHeaders, optionsResponse } from '../_shared/cors
 import { capacityWarning } from '../_shared/capacity.ts';
 import { allocateAndApply, persistAllocation, clearBookingResources, getRequestWindow, loadStudioConfigFromDb } from '../_shared/allocation.ts';
 import { createNotification } from '../_shared/notifications.ts';
+import { loadEmailTemplate, renderTemplate } from '../_shared/email-template.ts';
+import { getStudioInfo } from '../_shared/studio-info.ts';
+
+const PARTY_TYPES = ['birthday-party', 'baby-shower-hen', 'corporate'];
+
+// Emails the customer a Stripe deposit payment link for a party booking and
+// records the link URL + sent timestamp on the booking.
+// deno-lint-ignore no-explicit-any
+async function sendDepositLink(supabase: AdminSupabaseClient, bookingRow: any): Promise<{ success: boolean; error?: string }> {
+  const resendKey = Deno.env.get('RESEND_API_KEY');
+  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'bookings@pitterpotter.co.uk';
+  if (!resendKey) return { success: false, error: 'Email service not configured' };
+  if (!bookingRow.email) return { success: false, error: 'Booking has no email address' };
+
+  const siteUrl = Deno.env.get('SITE_URL') || 'https://pitterpotter.co.uk';
+  const paymentLinkUrl = `${siteUrl}/party-payment?booking=${bookingRow.booking_id}`;
+  const depositAmount = Number(bookingRow.deposit_amount) || 50;
+  const studioName = `Pitter Potter ${bookingRow.studio}`;
+  const studioInfo = getStudioInfo(bookingRow.studio);
+  const parts = String(bookingRow.date).split('-');
+  const formattedDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : bookingRow.date;
+
+  const templateVars: Record<string, string | number | undefined> = {
+    bookingId: bookingRow.booking_id,
+    name: bookingRow.name,
+    studio: studioName,
+    studioAddress: studioInfo.address,
+    studioPhone: studioInfo.phone,
+    date: formattedDate,
+    time: bookingRow.time,
+    depositAmount: depositAmount.toFixed(2),
+    paymentLinkUrl,
+  };
+
+  const tpl = await loadEmailTemplate('party_deposit_link');
+  const fallbackHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1B2D3C;">
+      <h2 style="color: #1B2D3C;">Your party booking — deposit required</h2>
+      <p>Hi ${bookingRow.name},</p>
+      <p>Thank you for booking your party at <strong>${studioName}</strong> on <strong>${formattedDate}</strong> at <strong>${bookingRow.time}</strong>.</p>
+      <p>To confirm your booking, please pay the <strong>£${depositAmount.toFixed(2)}</strong> deposit using the secure link below.</p>
+      <p style="text-align: center; margin: 30px 0;">
+        <a href="${paymentLinkUrl}" style="background: #1B2D3C; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Pay £${depositAmount.toFixed(2)} deposit</a>
+      </p>
+      <p>The remaining balance is payable on the day of your party.</p>
+      <p style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #DBE7E4; font-size: 12px; color: #666;">
+        <strong>${studioName}</strong><br/>
+        ${studioInfo.address}<br/>
+        ${studioInfo.phone}
+      </p>
+      <p>Pitter Potter</p>
+    </div>`;
+  const subject = `Deposit required for your party — ${studioName} on ${formattedDate}`;
+  const html = tpl ? renderTemplate(tpl.html_content, templateVars) : fallbackHtml;
+  const finalSubject = tpl ? renderTemplate(tpl.subject, templateVars) : subject;
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: fromEmail, to: bookingRow.email, subject: finalSubject, html }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+    return { success: false, error: errorData.message || 'Failed to send email' };
+  }
+  const resendData = await response.json().catch(() => ({}));
+
+  const sentAt = new Date().toISOString();
+  await supabase.from('bookings').update({
+    payment_link_url: paymentLinkUrl,
+    payment_link_sent_at: sentAt,
+  }).eq('booking_id', bookingRow.booking_id);
+
+  try {
+    await supabase.from('email_logs').insert({
+      email_type: 'party_deposit_link',
+      recipient: bookingRow.email,
+      subject: finalSubject,
+      body: html,
+      resend_id: resendData.id || null,
+      status: 'sent',
+      booking_id: bookingRow.booking_id,
+    });
+  } catch (logErr) {
+    console.error('Failed to log deposit link email:', logErr);
+  }
+
+  return { success: true };
+}
 
 // deno-lint-ignore no-explicit-any
 function toBookingInquiry(row: any): any {
@@ -38,6 +127,8 @@ function toBookingInquiry(row: any): any {
     paymentLinkSentAt: row.payment_link_sent_at || undefined,
     paymentStatus: row.payment_status || undefined,
     stripePaymentIntentId: row.stripe_payment_intent_id || undefined,
+    depositPaidAt: row.deposit_paid_at || undefined,
+    finalPaidAt: row.final_paid_at || undefined,
     createdAt: row.created_at || undefined,
     photos: row.photos || undefined,
     photoTags: row.photo_tags || undefined,
@@ -81,6 +172,8 @@ function toBookingRow(booking: any): any {
     payment_link_sent_at: opt(booking.paymentLinkSentAt),
     payment_status: opt(booking.paymentStatus),
     stripe_payment_intent_id: opt(booking.stripePaymentIntentId),
+    deposit_paid_at: opt(booking.depositPaidAt),
+    final_paid_at: opt(booking.finalPaidAt),
     photos: opt(booking.photos),
     photo_tags: opt(booking.photoTags),
     collection_status: opt(booking.collectionStatus),
@@ -170,6 +263,15 @@ Deno.serve(async (req) => {
       const warning = await capacityWarning(supabase, booking as Record<string, unknown>);
       const managementToken = crypto.randomUUID();
       const bookingRow = { ...toBookingRow(booking as Record<string, unknown>), management_token: managementToken };
+      // When staff mark a party deposit/final as paid in person, record when.
+      const isParty = PARTY_TYPES.includes(bookingRow.session_type);
+      const nowIso = new Date().toISOString();
+      if (isParty && Number(bookingRow.deposit_amount) > 0 && !bookingRow.deposit_paid_at) {
+        bookingRow.deposit_paid_at = nowIso;
+      }
+      if (isParty && bookingRow.payment_status === 'paid' && !bookingRow.final_paid_at) {
+        bookingRow.final_paid_at = nowIso;
+      }
       const { data: insertedRows, error } = await supabase.from('bookings').insert(bookingRow).select('id');
       if (error) throw error;
       if (warning) {
@@ -211,7 +313,7 @@ Deno.serve(async (req) => {
 
       // Send confirmation email if the booking has an email address
       // For party bookings, only send if the deposit has been paid (not payment-link)
-      const isPartyBooking = ['birthday-party', 'baby-shower-hen', 'corporate'].includes(booking.sessionType as string);
+      const isPartyBooking = PARTY_TYPES.includes(booking.sessionType as string);
       const depositPaid = Number(booking.depositAmount) > 0;
       if (booking.email && (!isPartyBooking || depositPaid)) {
         try {
@@ -222,6 +324,18 @@ Deno.serve(async (req) => {
           });
         } catch (emailErr) {
           console.error('Failed to send confirmation email for admin booking:', emailErr);
+        }
+      }
+
+      // Party booked with "Email Payment Link" — send the Stripe deposit link.
+      if (isPartyBooking && booking.sendDepositLink === true && !depositPaid) {
+        const depositLinkRow = { ...bookingRow, booking_id: booking.id };
+        const linkResult = await sendDepositLink(supabase, depositLinkRow);
+        if (!linkResult.success) {
+          console.error('Failed to send deposit link:', linkResult.error);
+          return new Response(JSON.stringify({ success: true, warning, depositLinkError: linkResult.error }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
       }
 
@@ -269,6 +383,8 @@ Deno.serve(async (req) => {
         bookingRow.payment_link_url = null;
         bookingRow.payment_link_sent_at = null;
         bookingRow.stripe_payment_intent_id = null;
+        bookingRow.deposit_paid_at = null;
+        bookingRow.final_paid_at = null;
       }
       // Remove undefined fields so partial updates don't wipe existing data
       for (const key of Object.keys(bookingRow)) {
@@ -500,6 +616,57 @@ Deno.serve(async (req) => {
         }
       }
 
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'sendDepositLink') {
+      if (!isSuperAdmin && !staff.can_edit_bookings) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!isNonEmptyString(id)) {
+        return new Response(JSON.stringify({ error: 'Invalid booking id' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: bookingRow } = await supabase.from('bookings').select('*').eq('booking_id', id).single();
+      if (!bookingRow) {
+        return new Response(JSON.stringify({ error: 'Booking not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!PARTY_TYPES.includes(bookingRow.session_type)) {
+        return new Response(JSON.stringify({ error: 'Not a party booking' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (bookingRow.deposit_paid_at || (Number(bookingRow.deposit_amount) > 0 && bookingRow.stripe_payment_intent_id)) {
+        return new Response(JSON.stringify({ error: 'Deposit already paid' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!isSuperAdmin && staff.allowed_studios && staff.allowed_studios.length > 0 && !staff.allowed_studios.includes(bookingRow.studio)) {
+        return new Response(JSON.stringify({ error: 'You can only update bookings for your assigned studio' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const linkResult = await sendDepositLink(supabase, bookingRow);
+      if (!linkResult.success) {
+        return new Response(JSON.stringify({ error: linkResult.error || 'Failed to send deposit link' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      await logAudit(supabase, staff, 'send_deposit_link', 'booking', id, {});
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

@@ -47,6 +47,7 @@ Single function, dispatched by `action`. All bodies include `username` + `sessio
 | `patch` | `booking: { id, ...fields }` (writes only sent fields) | `{ success }` |
 | `updateStatus` | `id`, `status` | `{ success }` |
 | `updateCollection` | `id`, `collectionStatus`, `collectedAt?` | `{ success }` |
+| `sendDepositLink` | `id` (party booking, unpaid deposit) | `{ success }` — emails the Stripe deposit link |
 | `delete` | `id` | `{ success }` |
 
 Notes:
@@ -100,6 +101,9 @@ interface Booking {
   paymentLinkSentAt?: string;
   paymentStatus?: string;
   stripePaymentIntentId?: string;
+  depositPaidAt?: string;        // ISO timestamp when the deposit was received
+  finalPaidAt?: string;          // ISO timestamp when the final balance was paid
+  sendDepositLink?: boolean;     // create only: emails the deposit payment link
   // Collections:
   collectionStatus?: 'painted' | 'ready' | 'collected';
   collectedAt?: string;

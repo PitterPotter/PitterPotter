@@ -46,18 +46,46 @@ Deno.serve(async (req) => {
       const type = metadata.type;
 
       if (type === 'party_deposit') {
-        // Create the booking now that deposit is paid — booking does not exist in DB until this point
         const bookingId = metadata.bookingId;
-        const depositAmount = Number(metadata.amount) || 50;
+        const depositAmount = Number(metadata.amount) || (obj.amount_total ? obj.amount_total / 100 : 50);
+        // For checkout sessions, obj.id is the session id — store the payment
+        // intent id instead so it links to the charge in Stripe.
+        const paymentRef = obj.payment_intent || obj.id;
+        const paidAt = new Date().toISOString();
         if (bookingId) {
-          // Check if booking already exists (idempotent — confirm-party-payment may have created it)
-          const { data: existing } = await supabase
+          // Check if this deposit is for an existing booking (admin-created
+          // booking where staff emailed a deposit payment link).
+          const { data: existingBooking } = await supabase
             .from('bookings')
-            .select('booking_id')
-            .eq('stripe_payment_intent_id', obj.id)
+            .select('id, management_token, stripe_payment_intent_id')
+            .eq('booking_id', bookingId)
             .maybeSingle();
 
-          if (!existing) {
+          if (existingBooking) {
+            if (existingBooking.stripe_payment_intent_id === paymentRef) {
+              console.log('Deposit already recorded for booking:', bookingId);
+            } else {
+              const { error: updateError } = await supabase.from('bookings').update({
+                deposit_amount: depositAmount,
+                payment_status: 'paid',
+                stripe_payment_intent_id: paymentRef,
+                deposit_paid_at: paidAt,
+              }).eq('booking_id', bookingId);
+              if (updateError) throw updateError;
+
+              // Deposit received — send the booking confirmation email.
+              try {
+                await fetch(`${supabaseUrl}/functions/v1/send-booking-confirmation`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ bookingId, managementToken: existingBooking.management_token }),
+                });
+              } catch (emailErr) {
+                console.error('Failed to send confirmation email after deposit:', emailErr);
+              }
+            }
+          } else {
+            // Online booking — create the booking now that deposit is paid.
             const managementToken = crypto.randomUUID();
 
             const { data: insertedBooking, error: insertError } = await supabase.from('bookings').insert({
@@ -78,7 +106,8 @@ Deno.serve(async (req) => {
               final_seats: Number(metadata.finalSeats) || null,
               final_balance: Number(metadata.finalBalance) || null,
               payment_status: 'paid',
-              stripe_payment_intent_id: obj.id,
+              stripe_payment_intent_id: paymentRef,
+              deposit_paid_at: paidAt,
               management_token: managementToken,
             }).select('id').single();
 
@@ -144,6 +173,7 @@ Deno.serve(async (req) => {
         if (bookingId) {
           const updateData: any = {
             payment_status: 'paid',
+            final_paid_at: new Date().toISOString(),
           };
           if (metadata.finalSeats) {
             updateData.final_seats = Number(metadata.finalSeats);

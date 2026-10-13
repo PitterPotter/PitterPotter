@@ -46,6 +46,9 @@ export interface BookingInquiry {
   paymentLinkSentAt?: string;
   paymentStatus?: 'pending' | 'paid' | 'refunded';
   stripePaymentIntentId?: string;
+  depositPaidAt?: string;
+  finalPaidAt?: string;
+  sendDepositLink?: boolean;
   managementToken?: string;
   createdAt?: string;
   photos?: string[];

@@ -108,6 +108,7 @@ Deno.serve(async (req) => {
       final_balance: Number(metadata.finalBalance) || null,
       payment_status: 'paid',
       stripe_payment_intent_id: paymentIntentId,
+      deposit_paid_at: new Date().toISOString(),
       management_token: managementToken,
     };
 

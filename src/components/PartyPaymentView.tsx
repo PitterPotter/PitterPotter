@@ -17,6 +17,9 @@ interface BookingData {
   paintersCount: number;
   finalSeats: number | null;
   depositAmount: number;
+  depositPaid: boolean;
+  depositPaidAt: string | null;
+  finalPaidAt: string | null;
   partyPrice: number;
   finalBalance: number;
   paymentStatus: string;
@@ -60,7 +63,7 @@ export default function PartyPaymentView({ setCurrentPage, successMode = false }
       }
       setBooking(data);
       setSeatCount(data.finalSeats || data.paintersCount || 1);
-      if (data.paymentStatus === 'paid') {
+      if (data.finalPaidAt) {
         setPaid(true);
       }
       setLoading(false);
@@ -100,6 +103,35 @@ export default function PartyPaymentView({ setCurrentPage, successMode = false }
     }
   };
 
+  const handlePayDeposit = async () => {
+    if (!booking) return;
+    setPaying(true);
+    setError('');
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-party-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ bookingId: booking.bookingId, action: 'deposit' }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || 'Failed to start payment');
+        setPaying(false);
+        return;
+      }
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Payment error:', err);
+      setError('Failed to start payment. Please try again.');
+      setPaying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -114,7 +146,7 @@ export default function PartyPaymentView({ setCurrentPage, successMode = false }
         <div className="text-center space-y-6 max-w-md">
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto" />
           <h1 className="font-heading text-2xl font-black text-[#1B2D3C]">Payment Complete</h1>
-          <p className="text-sm text-[#1B2D3C]/70">Thank you{booking?.name ? `, ${booking.name}` : ''}! Your final balance has been paid. We look forward to seeing you{booking?.studio ? ` at our ${booking.studio} studio` : ''}.</p>
+          <p className="text-sm text-[#1B2D3C]/70">Thank you{booking?.name ? `, ${booking.name}` : ''}! Your payment has been received. We look forward to seeing you{booking?.studio ? ` at our ${booking.studio} studio` : ''}.</p>
           {booking && (
             <div className="bg-[#D6E2E9]/30 p-4 rounded-lg text-left space-y-2 text-xs font-semibold text-[#1B2D3C]">
               <p><span className="font-bold">Booking ref:</span> {booking.bookingId}</p>
@@ -171,6 +203,93 @@ export default function PartyPaymentView({ setCurrentPage, successMode = false }
   }
 
   if (!booking) return null;
+
+  if (!booking.depositPaid) {
+    return (
+      <div className="min-h-[60vh] px-4 py-12">
+        <div className="max-w-lg mx-auto space-y-6">
+          <div className="text-center space-y-2">
+            <h1 className="font-heading text-3xl font-black text-[#1B2D3C]">Party Deposit</h1>
+            <p className="text-sm text-[#1B2D3C]/70">
+              Hi {booking.name}, pay your deposit to confirm your party booking.
+            </p>
+          </div>
+
+          {wasCancelled && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 text-center">
+              Payment was cancelled. You can try again below.
+            </div>
+          )}
+
+          <div className="bg-white border border-[#1B2D3C]/20 rounded-xl p-6 space-y-5 shadow-sm">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[#1B2D3C]/60">Studio</span>
+                <span className="font-bold text-[#1B2D3C]">{booking.studio}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#1B2D3C]/60">Date</span>
+                <span className="font-bold text-[#1B2D3C]">{booking.date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#1B2D3C]/60">Time</span>
+                <span className="font-bold text-[#1B2D3C]">{booking.time}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#1B2D3C]/60">Party size</span>
+                <span className="font-bold text-[#1B2D3C]">{booking.paintersCount} painters</span>
+              </div>
+            </div>
+
+            <div className="border-t border-[#1B2D3C]/10 pt-5 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[#1B2D3C]/60">Party total ({booking.paintersCount} seats)</span>
+                <span className="font-semibold text-[#1B2D3C]">£{(booking.paintersCount * booking.partyPrice).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-[#1B2D3C]/10">
+                <span className="font-black text-[#1B2D3C]">Deposit due now</span>
+                <span className="font-heading text-xl font-black text-[#1B2D3C]">£{booking.depositAmount.toFixed(2)}</span>
+              </div>
+              <p className="text-[10px] text-[#1B2D3C]/50">
+                The remaining balance of £{Math.max(0, booking.paintersCount * booking.partyPrice - booking.depositAmount).toFixed(2)} is payable on the day of your party.
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700 text-center">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handlePayDeposit}
+              disabled={paying}
+              className="w-full py-4 bg-[#1B2D3C] text-white font-bold text-sm uppercase tracking-wider rounded-lg hover:bg-[#486581] transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {paying ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+              ) : (
+                <>Pay £{booking.depositAmount.toFixed(2)} deposit <ArrowRight className="w-4 h-4" /></>
+              )}
+            </button>
+
+            <p className="text-center text-[10px] text-[#1B2D3C]/50">
+              Secure payment powered by Stripe. Your card details are never stored.
+            </p>
+          </div>
+
+          <div className="text-center">
+            <button
+              onClick={() => setCurrentPage('home')}
+              className="text-xs text-[#1B2D3C]/60 hover:text-[#1B2D3C] transition-colors cursor-pointer"
+            >
+              ← Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const total = seatCount * booking.partyPrice;
   const balance = Math.max(0, total - booking.depositAmount);

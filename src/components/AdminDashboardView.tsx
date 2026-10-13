@@ -11,7 +11,7 @@ import { DayPicker } from 'react-day-picker';
 import { format, isSameDay, parseISO, getDay } from 'date-fns';
 import { BookingInquiry, GiftCard, Staff, AuditLog, GiftCardApiRow, StaffApiRow, EmailTemplate, SMSTemplate, EmailLog } from '../types';
 import { supabase, isSupabaseEnabled } from '../lib/supabase';
-import { loadBookings, createBooking, updateBooking, patchBooking, updateBookingStatus, deleteBooking, getRemainingCapacity } from '../lib/bookings';
+import { loadBookings, createBooking, updateBooking, patchBooking, updateBookingStatus, deleteBooking, getRemainingCapacity, sendDepositLink } from '../lib/bookings';
 import { compressImage } from '../lib/imageCompression';
 import QRScanner from './QRScanner';
 import { getAllSlots, getSlots, setSlots, DEFAULT_SLOTS, SlotSessionType, Studio, TimeSlotsData, getStudioSlots, sortSlots, loadSlotsFromSupabase, saveSlotsToSupabase, DayType } from '../lib/timeSlots';
@@ -203,6 +203,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [confirmingIds, setConfirmingIds] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [drawerBooking, setDrawerBooking] = useState<BookingInquiry | null>(null);
+  const [sendingDepositLink, setSendingDepositLink] = useState(false);
   const [staffNotesDraft, setStaffNotesDraft] = useState('');
   const [drawerCommLogs, setDrawerCommLogs] = useState<EmailLog[]>([]);
   const [drawerCommLoading, setDrawerCommLoading] = useState(false);
@@ -1978,6 +1979,23 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     }
   };
 
+  const handleSendDepositLink = async () => {
+    if (!drawerBooking) return;
+    setSendingDepositLink(true);
+    try {
+      await sendDepositLink(drawerBooking.id, staff);
+      const now = new Date().toISOString();
+      const updated = { ...drawerBooking, paymentLinkUrl: `https://www.pitterpotter.co.uk/party-payment?booking=${drawerBooking.id}`, paymentLinkSentAt: now };
+      setDrawerBooking(updated);
+      setInquiries(inquiries.map((i) => i.id === updated.id ? updated : i));
+      showToast('Deposit link emailed to customer', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to send deposit link', 'error');
+    } finally {
+      setSendingDepositLink(false);
+    }
+  };
+
   const saveNewBooking = async () => {
     if (!newBooking.name || !newBooking.date || !newBooking.time) {
       showToast('Please fill in name, date, and time', 'error');
@@ -2049,6 +2067,11 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           paymentStatus: newBookingPaymentMethod === 'paid'
             ? (newBookingFinalPending ? 'pending' : 'paid')
             : 'pending',
+          ...(newBookingPaymentMethod === 'paid' ? {
+            depositPaidAt: new Date().toISOString(),
+            ...(!newBookingFinalPending ? { finalPaidAt: new Date().toISOString() } : {}),
+          } : {}),
+          sendDepositLink: newBookingPaymentMethod === 'payment-link' && !!newBooking.email,
         } : {}),
       };
       const warning = await createBooking(booking, staff);
@@ -3921,7 +3944,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   )}
                   {newBookingPaymentMethod === 'payment-link' && (
                     <p className="text-[10px] text-[#1B2D3C]/60 font-semibold">
-                      A £50 deposit payment link will be emailed to the customer. Final balance of £{Math.max(0, (newBooking.paintersCount || 1) * partyPrice - 50).toFixed(2)} will be collected 48 hours before the party.
+                      A £50 Stripe deposit link will be emailed to the customer.{!newBooking.email && ' No email address entered — the link cannot be sent.'} Remaining balance of £{Math.max(0, (newBooking.paintersCount || 1) * partyPrice - 50).toFixed(2)} is payable on the day.
                     </p>
                   )}
                 </div>
@@ -5920,8 +5943,14 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                     {drawerBooking.depositAmount != null && (
                       <div><span className="text-[#1B2D3C]/50">Deposit</span> £{drawerBooking.depositAmount.toFixed(2)}</div>
                     )}
+                    {drawerBooking.depositPaidAt && (
+                      <div><span className="text-[#1B2D3C]/50">Deposit paid</span> {new Date(drawerBooking.depositPaidAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</div>
+                    )}
                     {drawerBooking.finalBalance != null && (
                       <div><span className="text-[#1B2D3C]/50">Balance</span> £{drawerBooking.finalBalance.toFixed(2)}</div>
+                    )}
+                    {drawerBooking.finalPaidAt && (
+                      <div><span className="text-[#1B2D3C]/50">Balance paid</span> {new Date(drawerBooking.finalPaidAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</div>
                     )}
                     {drawerBooking.paymentStatus && (
                       <div><span className="text-[#1B2D3C]/50">Status</span> <span className={`capitalize ${drawerBooking.paymentStatus === 'paid' ? 'text-emerald-700' : drawerBooking.paymentStatus === 'refunded' ? 'text-red-700' : 'text-amber-700'}`}>{drawerBooking.paymentStatus}</span></div>
@@ -5958,16 +5987,35 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   <p className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/50 mb-1">Party Payment</p>
                   <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-[#1B2D3C]">
                     <div><span className="text-[#1B2D3C]/50">Seats</span> {drawerBooking.finalSeats ?? drawerBooking.paintersCount}</div>
-                    <div><span className="text-[#1B2D3C]/50">Deposit</span> £{(drawerBooking.depositAmount ?? 50).toFixed(2)}</div>
+                    <div>
+                      <span className="text-[#1B2D3C]/50">Deposit</span> £{(drawerBooking.depositAmount ?? 50).toFixed(2)}{' '}
+                      {drawerBooking.depositPaidAt
+                        ? <span className="text-emerald-700">· received {new Date(drawerBooking.depositPaidAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                        : <span className="text-amber-700">· unpaid</span>}
+                    </div>
                     <div><span className="text-[#1B2D3C]/50">Total</span> £{((drawerBooking.finalSeats ?? drawerBooking.paintersCount) * partyPrice).toFixed(2)}</div>
-                    <div><span className="text-[#1B2D3C]/50">Balance</span> £{(drawerBooking.finalBalance ?? Math.max(0, (drawerBooking.finalSeats ?? drawerBooking.paintersCount) * partyPrice - (drawerBooking.depositAmount ?? 50))).toFixed(2)}</div>
+                    <div>
+                      <span className="text-[#1B2D3C]/50">Balance</span> £{(drawerBooking.finalBalance ?? Math.max(0, (drawerBooking.finalSeats ?? drawerBooking.paintersCount) * partyPrice - (drawerBooking.depositAmount ?? 50))).toFixed(2)}{' '}
+                      {drawerBooking.finalPaidAt
+                        ? <span className="text-emerald-700">· paid {new Date(drawerBooking.finalPaidAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                        : <span className="text-amber-700">· due</span>}
+                    </div>
                   </div>
                   {drawerBooking.paymentLinkUrl && (
                     <div className="text-[10px] text-[#1B2D3C]/60">
-                      Reminder sent: {drawerBooking.paymentLinkSentAt ? new Date(drawerBooking.paymentLinkSentAt).toLocaleDateString('en-GB') : '—'}
+                      Link sent: {drawerBooking.paymentLinkSentAt ? new Date(drawerBooking.paymentLinkSentAt).toLocaleDateString('en-GB') : '—'}
                       <br />
                       <a href={drawerBooking.paymentLinkUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">Payment link</a>
                     </div>
+                  )}
+                  {!drawerBooking.depositPaidAt && !drawerBooking.stripePaymentIntentId && drawerBooking.email && (
+                    <button
+                      onClick={handleSendDepositLink}
+                      disabled={sendingDepositLink}
+                      className="w-full px-3 py-2 bg-[#1B2D3C] text-white text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-[#1B2D3C]/90 disabled:opacity-50 transition-all cursor-pointer"
+                    >
+                      {sendingDepositLink ? 'Sending…' : `Email £${(drawerBooking.depositAmount ?? 50).toFixed(0)} deposit link`}
+                    </button>
                   )}
                 </div>
               )}

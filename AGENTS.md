@@ -1,5 +1,10 @@
 # Pitter Potter — Agent Notes
 
+## Git policy
+
+**Do NOT `git push` unless the owner explicitly asks for it.** Committing locally is fine
+if asked, but pushing to `origin` requires an explicit instruction each time.
+
 ## Always update both web AND iOS
 
 Per project owner: **every admin-facing change must be applied to both the web admin

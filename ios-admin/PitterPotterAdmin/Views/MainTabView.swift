@@ -21,9 +21,14 @@ struct MainTabView: View {
             // Sage header bar matching web admin
             WebHeaderBar(
                 staff: authVM.staff,
+                studios: authVM.staff?.visibleStudios ?? [],
+                selectedStudio: Binding(
+                    get: { bookingsVM.selectedStudio },
+                    set: { bookingsVM.selectedStudio = $0 }
+                ),
                 onLogout: { authVM.logout() },
                 onNotifications: { showingNotifications = true },
-                unreadCount: notificationsVM.unreadCount,
+                unreadCount: notificationsVM.unreadCount(studio: bookingsVM.selectedStudio),
                 canAddWalkIn: authVM.staff?.canAddWalkIns == true || authVM.staff?.role == "super_admin",
                 onWalkIn: { showingNewWalkIn = true },
                 onNewBooking: { showingNewBooking = true },
@@ -44,7 +49,7 @@ struct MainTabView: View {
             WebTabBar(
                 selectedTab: $selectedTab,
                 isSuperAdmin: authVM.staff?.role == "super_admin",
-                pendingCount: bookingsVM.bookings.filter { $0.status == "pending" }.count,
+                pendingCount: bookingsVM.visibleBookings.filter { $0.status == "pending" }.count,
                 onScan: { showingScanner = true }
             )
             .frame(maxWidth: 1280)
@@ -135,6 +140,7 @@ struct MainTabView: View {
         .sheet(isPresented: $showingNotifications) {
             NotificationsView()
                 .environmentObject(authVM)
+                .environmentObject(bookingsVM)
         }
         .task {
             // RootView handles all data loading and polling
@@ -277,6 +283,8 @@ struct WebTabBar: View {
 // Sage header bar matching web admin exactly
 struct WebHeaderBar: View {
     let staff: Staff?
+    var studios: [Studio] = []
+    var selectedStudio: Binding<Studio?>? = nil
     let onLogout: () -> Void
     let onNotifications: () -> Void
     let unreadCount: Int
@@ -407,6 +415,26 @@ struct WebHeaderBar: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
 
+            // Location switcher — only when staff can see more than one studio
+            if let selection = selectedStudio, studios.count > 1 {
+                HStack(spacing: 6) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(AppFont.body(10, weight: .bold))
+                        .foregroundStyle(PPBrand.charcoal.opacity(0.5))
+                    studioChip(label: "All Locations", isSelected: selection.wrappedValue == nil) {
+                        selection.wrappedValue = nil
+                    }
+                    ForEach(studios, id: \.self) { studio in
+                        studioChip(label: studio.rawValue, isSelected: selection.wrappedValue == studio) {
+                            selection.wrappedValue = studio
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
+
             // Quick action buttons (matching web header)
             if canAddWalkIn {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -506,5 +534,22 @@ struct WebHeaderBar: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func studioChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(AppFont.body(11, weight: .bold))
+                .foregroundStyle(isSelected ? .white : PPBrand.charcoal.opacity(0.6))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(isSelected ? PPBrand.charcoal : Color.white)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(PPBrand.charcoal.opacity(0.15), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }

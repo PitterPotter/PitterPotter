@@ -8,11 +8,7 @@ struct NewWalkInView: View {
     var initialSessionType: SessionType = .painting
 
     private var availableStudios: [Studio] {
-        guard let staff = authVM.staff else { return Studio.allCases }
-        if let allowed = staff.allowedStudios, !allowed.isEmpty {
-            return allowed.compactMap { Studio(rawValue: $0) }
-        }
-        return Studio.allCases
+        authVM.staff?.visibleStudios ?? Studio.allCases
     }
 
     @State private var name = ""
@@ -113,7 +109,8 @@ struct NewWalkInView: View {
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 sessionType = initialSessionType
-                if let first = availableStudios.first { selectedStudio = first }
+                selectedStudio = bookingsVM.selectedStudio.flatMap { availableStudios.contains($0) ? $0 : nil }
+                    ?? availableStudios.first ?? .Putney
             }
             .onChange(of: selectedStudio) { _ in checkCapacity() }
             .onChange(of: date) { _ in checkCapacity() }

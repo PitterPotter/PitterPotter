@@ -12,11 +12,7 @@ struct GhostBookingView: View {
     @State private var isSaving = false
 
     private var availableStudios: [Studio] {
-        guard let staff = authVM.staff else { return Studio.allCases }
-        if let allowed = staff.allowedStudios, !allowed.isEmpty {
-            return allowed.compactMap { Studio(rawValue: $0) }
-        }
-        return Studio.allCases
+        authVM.staff?.visibleStudios ?? Studio.allCases
     }
 
     var body: some View {
@@ -79,7 +75,8 @@ struct GhostBookingView: View {
                 }
             }
             .onAppear {
-                if let first = availableStudios.first { selectedStudio = first }
+                selectedStudio = bookingsVM.selectedStudio.flatMap { availableStudios.contains($0) ? $0 : nil }
+                    ?? availableStudios.first ?? .Putney
                 checkCapacity()
             }
             .onChange(of: selectedStudio) { _ in checkCapacity() }

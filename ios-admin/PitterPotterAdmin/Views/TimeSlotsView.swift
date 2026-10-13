@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TimeSlotsView: View {
     @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var bookingsVM: BookingsViewModel
     @State private var slots: TimeSlotsData = TimeSlotsData.default
     @State private var selectedStudio: String = "Putney"
     @State private var selectedDayType: String = "weekday"
@@ -15,7 +16,9 @@ struct TimeSlotsView: View {
         ("party", "Party"),
     ]
 
-    private let studios = ["Putney", "Wimbledon"]
+    private var studios: [String] {
+        (authVM.staff?.visibleStudios ?? Studio.allCases).map { $0.rawValue }
+    }
     private let dayTypes: [(key: String, label: String)] = [
         ("weekday", "Weekdays"),
         ("weekend", "Weekends"),
@@ -36,7 +39,14 @@ struct TimeSlotsView: View {
             }
             .navigationTitle("Time Slots")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { loadSlots() }
+            .onAppear {
+                if let selected = bookingsVM.selectedStudio?.rawValue, studios.contains(selected) {
+                    selectedStudio = selected
+                } else if let first = studios.first {
+                    selectedStudio = first
+                }
+                loadSlots()
+            }
         }
     }
 

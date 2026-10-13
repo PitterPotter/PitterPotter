@@ -8,6 +8,10 @@ struct CapacityView: View {
     @State private var capacities: [String: CapacityResult] = [:]
     @State private var isLoading = false
 
+    private var availableStudios: [Studio] {
+        authVM.staff?.visibleStudios ?? Studio.allCases
+    }
+
     private let timeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"]
 
     var body: some View {
@@ -15,7 +19,7 @@ struct CapacityView: View {
             VStack(spacing: 0) {
                 HStack {
                     Picker("Studio", selection: $selectedStudio) {
-                        ForEach(Studio.allCases, id: \.self) { s in
+                        ForEach(availableStudios, id: \.self) { s in
                             Text(s.rawValue).tag(s)
                         }
                     }
@@ -51,7 +55,14 @@ struct CapacityView: View {
             .navigationTitle("Capacity")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: selectedStudio) { _ in loadCapacities() }
-            .onAppear { loadCapacities() }
+            .onAppear {
+                if let selected = bookingsVM.selectedStudio, availableStudios.contains(selected) {
+                    selectedStudio = selected
+                } else if let first = availableStudios.first {
+                    selectedStudio = first
+                }
+                loadCapacities()
+            }
             .refreshable { loadCapacities() }
         }
     }

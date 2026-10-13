@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, X, CheckCheck, Calendar, Users, Gift, Camera, UserCog, AlertCircle } from 'lucide-react';
 import { AppNotification, NotificationType, Staff } from '../../types';
 import { supabase, isSupabaseEnabled } from '../../lib/supabase';
-import { fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead } from '../../lib/notifications';
+import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from '../../lib/notifications';
 
 interface NotificationBellProps {
   staff: Staff;
+  studioFilter?: 'all' | 'Putney' | 'Wimbledon';
   onNavigate: (tab: string, entityId?: string) => void;
 }
 
@@ -85,40 +86,37 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-export default function NotificationBell({ staff, onNavigate }: NotificationBellProps) {
+export default function NotificationBell({ staff, studioFilter = 'all', onNavigate }: NotificationBellProps) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
 
-  const loadUnreadCount = useCallback(async () => {
-    try {
-      const count = await fetchUnreadCount(staff);
-      setUnreadCount(count);
-    } catch {
-      // ignore
-    }
-  }, [staff]);
-
-  const loadNotifications = useCallback(async () => {
-    setLoading(true);
+  // Fetch the list (not just a count) so the badge can be scoped to the selected studio.
+  // Global/"All" notifications always show regardless of selection.
+  const loadNotifications = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     try {
       const list = await fetchNotifications(staff, 50);
       setNotifications(list);
     } catch {
       // ignore
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, [staff]);
 
+  const visibleNotifications = notifications.filter(n =>
+    studioFilter === 'all' || !n.studio || n.studio === 'All' || n.studio === studioFilter
+  );
+  const unreadCount = visibleNotifications.filter(n => !n.read_at).length;
+
   useEffect(() => {
-    loadUnreadCount();
-    const interval = setInterval(loadUnreadCount, 30_000);
+    loadNotifications();
+    const interval = setInterval(() => loadNotifications(), 30_000);
     return () => clearInterval(interval);
-  }, [loadUnreadCount]);
+  }, [loadNotifications]);
 
   // Unlock audio on first user interaction (browsers require this)
   useEffect(() => {
@@ -157,17 +155,17 @@ export default function NotificationBell({ staff, onNavigate }: NotificationBell
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications' },
-        () => { playNotificationSound(); loadUnreadCount(); if (open) loadNotifications(); }
+        () => { playNotificationSound(); loadNotifications(); }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'notifications' },
-        () => { loadUnreadCount(); if (open) loadNotifications(); }
+        () => { loadNotifications(); }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [loadUnreadCount, loadNotifications, open, playNotificationSound]);
+  }, [loadNotifications, playNotificationSound]);
 
   // Close panel on outside click
   useEffect(() => {
@@ -185,14 +183,13 @@ export default function NotificationBell({ staff, onNavigate }: NotificationBell
   const handleBellClick = () => {
     const newOpen = !open;
     setOpen(newOpen);
-    if (newOpen) loadNotifications();
+    if (newOpen) loadNotifications(true);
   };
 
   const handleNotificationClick = async (notif: AppNotification) => {
     if (!notif.read_at) {
       await markNotificationRead(staff, notif.id);
       setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read_at: new Date().toISOString() } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
     }
     setOpen(false);
     if (notif.entity_type === 'booking') {
@@ -209,7 +206,6 @@ export default function NotificationBell({ staff, onNavigate }: NotificationBell
   const handleMarkAllRead = async () => {
     await markAllNotificationsRead(staff);
     setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
-    setUnreadCount(0);
   };
 
   return (
@@ -271,14 +267,14 @@ export default function NotificationBell({ staff, onNavigate }: NotificationBell
               </div>
             )}
 
-            {!loading && notifications.length === 0 && (
+            {!loading && visibleNotifications.length === 0 && (
               <div className="px-4 py-10 text-center">
                 <Bell className="w-8 h-8 text-[#1B2D3C]/20 mx-auto mb-2" />
                 <p className="text-xs font-bold text-[#1B2D3C]/40">No notifications yet</p>
               </div>
             )}
 
-            {!loading && notifications.map((notif) => {
+            {!loading && visibleNotifications.map((notif) => {
               const Icon = NOTIFICATION_ICONS[notif.type] || Bell;
               const colorClass = NOTIFICATION_COLORS[notif.type] || 'text-stone-600 bg-stone-50';
               const isUnread = !notif.read_at;

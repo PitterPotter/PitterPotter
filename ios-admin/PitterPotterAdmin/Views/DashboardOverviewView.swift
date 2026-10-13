@@ -11,21 +11,19 @@ struct DashboardOverviewView: View {
     @State private var showingCollectionScanner = false
     @State private var showingNewBooking = false
     @State private var showingNewBabyPrint = false
-    @State private var selectedStudio: String? = nil
+    private var selectedStudio: String? {
+        get { bookingsVM.selectedStudio?.rawValue }
+        nonmutating set { bookingsVM.selectedStudio = newValue.flatMap { Studio(rawValue: $0) } }
+    }
 
     private var availableStudios: [String] {
-        guard let staff = authVM.staff else { return ["All", "Putney", "Wimbledon"] }
-        if let allowed = staff.allowedStudios, !allowed.isEmpty {
-            var studios = ["All"]
-            studios.append(contentsOf: allowed)
-            return studios
-        }
-        return ["All", "Putney", "Wimbledon"]
+        var studios = ["All"]
+        studios.append(contentsOf: (authVM.staff?.visibleStudios ?? Studio.allCases).map { $0.rawValue })
+        return studios
     }
 
     private var filteredBookings: [Booking] {
-        guard let studio = selectedStudio else { return bookingsVM.bookings }
-        return bookingsVM.bookings.filter { $0.studio == studio }
+        bookingsVM.visibleBookings
     }
 
     private var todayString: String {
@@ -271,7 +269,7 @@ struct DashboardOverviewView: View {
         let cal = Calendar.current
         let weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
         let weekEnd = cal.dateInterval(of: .weekOfYear, for: Date())?.end ?? Date()
-        return bookingsVM.bookings.filter { b in
+        return filteredBookings.filter { b in
             if let d = dateFromString(b.date) { return d >= weekStart && d < weekEnd }
             return false
         }.reduce(0) { $0 + ($1.finalPrice ?? $1.estimatedPrice ?? 0) }
@@ -281,7 +279,7 @@ struct DashboardOverviewView: View {
         let cal = Calendar.current
         let monthStart = cal.dateInterval(of: .month, for: Date())?.start ?? Date()
         let monthEnd = cal.dateInterval(of: .month, for: Date())?.end ?? Date()
-        return bookingsVM.bookings.filter { b in
+        return filteredBookings.filter { b in
             if let d = dateFromString(b.date) { return d >= monthStart && d < monthEnd }
             return false
         }.reduce(0) { $0 + ($1.finalPrice ?? $1.estimatedPrice ?? 0) }

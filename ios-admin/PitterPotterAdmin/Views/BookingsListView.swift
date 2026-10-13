@@ -52,28 +52,28 @@ struct BookingsListView: View {
                 // Session type tabs
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        SessionTabButton(title: "All", count: bookingsVM.bookings.count, isSelected: bookingsVM.selectedSessionType == nil) {
+                        SessionTabButton(title: "All", count: bookingsVM.visibleBookings.count, isSelected: bookingsVM.selectedSessionType == nil) {
                             bookingsVM.selectedSessionType = nil
                         }
-                        SessionTabButton(title: "Painting", count: bookingsVM.bookings.filter { $0.sessionType == "painting" }.count, isSelected: bookingsVM.selectedSessionType == "painting") {
+                        SessionTabButton(title: "Painting", count: bookingsVM.visibleBookings.filter { $0.sessionType == "painting" }.count, isSelected: bookingsVM.selectedSessionType == "painting") {
                             bookingsVM.selectedSessionType = "painting"
                         }
-                        SessionTabButton(title: "Baby Prints", count: bookingsVM.bookings.filter { $0.sessionType == "clay-imprints" }.count, isSelected: bookingsVM.selectedSessionType == "clay-imprints") {
+                        SessionTabButton(title: "Baby Prints", count: bookingsVM.visibleBookings.filter { $0.sessionType == "clay-imprints" }.count, isSelected: bookingsVM.selectedSessionType == "clay-imprints") {
                             bookingsVM.selectedSessionType = "clay-imprints"
                         }
-                        SessionTabButton(title: "Party", count: bookingsVM.bookings.filter { $0.sessionType == "birthday-party" }.count, isSelected: bookingsVM.selectedSessionType == "birthday-party") {
+                        SessionTabButton(title: "Party", count: bookingsVM.visibleBookings.filter { $0.sessionType == "birthday-party" }.count, isSelected: bookingsVM.selectedSessionType == "birthday-party") {
                             bookingsVM.selectedSessionType = "birthday-party"
                         }
-                        SessionTabButton(title: "Shower/Hen", count: bookingsVM.bookings.filter { $0.sessionType == "baby-shower-hen" }.count, isSelected: bookingsVM.selectedSessionType == "baby-shower-hen") {
+                        SessionTabButton(title: "Shower/Hen", count: bookingsVM.visibleBookings.filter { $0.sessionType == "baby-shower-hen" }.count, isSelected: bookingsVM.selectedSessionType == "baby-shower-hen") {
                             bookingsVM.selectedSessionType = "baby-shower-hen"
                         }
-                        SessionTabButton(title: "Corporate", count: bookingsVM.bookings.filter { $0.sessionType == "corporate" }.count, isSelected: bookingsVM.selectedSessionType == "corporate") {
+                        SessionTabButton(title: "Corporate", count: bookingsVM.visibleBookings.filter { $0.sessionType == "corporate" }.count, isSelected: bookingsVM.selectedSessionType == "corporate") {
                             bookingsVM.selectedSessionType = "corporate"
                         }
-                        SessionTabButton(title: "Exclusive", count: bookingsVM.bookings.filter { $0.sessionType == "exclusive-hire" }.count, isSelected: bookingsVM.selectedSessionType == "exclusive-hire") {
+                        SessionTabButton(title: "Exclusive", count: bookingsVM.visibleBookings.filter { $0.sessionType == "exclusive-hire" }.count, isSelected: bookingsVM.selectedSessionType == "exclusive-hire") {
                             bookingsVM.selectedSessionType = "exclusive-hire"
                         }
-                        SessionTabButton(title: "Sip & Paint", count: bookingsVM.bookings.filter { $0.sessionType == "sip-and-paint" }.count, isSelected: bookingsVM.selectedSessionType == "sip-and-paint") {
+                        SessionTabButton(title: "Sip & Paint", count: bookingsVM.visibleBookings.filter { $0.sessionType == "sip-and-paint" }.count, isSelected: bookingsVM.selectedSessionType == "sip-and-paint") {
                             bookingsVM.selectedSessionType = "sip-and-paint"
                         }
                     }
@@ -675,10 +675,7 @@ struct FiltersView: View {
     @Environment(\.dismiss) var dismiss
 
     private var availableStudios: [Studio] {
-        if let allowed = authVM.staff?.allowedStudios, !allowed.isEmpty {
-            return Studio.allCases.filter { allowed.contains($0.rawValue) }
-        }
-        return Studio.allCases
+        authVM.staff?.visibleStudios ?? Studio.allCases
     }
 
     var body: some View {

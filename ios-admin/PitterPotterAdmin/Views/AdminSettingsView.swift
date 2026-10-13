@@ -155,12 +155,19 @@ struct AdminSettingsView: View {
 
     // MARK: - Capacity Section
 
+    /// Capacity rows scoped to the active location — edits still resolve by
+    /// row id so filtering the display can't corrupt indices.
+    private var visibleCapacityRows: [CapacityRow] {
+        guard let studio = bookingsVM.selectedStudio else { return capacityRows }
+        return capacityRows.filter { $0.studio == studio.rawValue }
+    }
+
     private var capacitySection: some View {
         Section(header: Text("Capacity (Max Seats)")) {
             if capacityLoading {
                 ProgressView()
             } else {
-                ForEach(capacityRows) { row in
+                ForEach(visibleCapacityRows) { row in
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(row.studio) — \(row.sessionLabel)")
                             .font(AppFont.body(15, weight: .medium))

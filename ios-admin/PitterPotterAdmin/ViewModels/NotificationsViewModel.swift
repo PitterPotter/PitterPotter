@@ -14,7 +14,7 @@ class NotificationsViewModel: ObservableObject {
         do {
             let result = try await APIClient.shared.fetchNotifications(staff: staff, limit: 50)
             notifications = result
-            await refreshUnreadCount(staff: staff)
+            unreadCount = result.filter { !$0.isRead }.count
         } catch {
             print("Failed to load notifications: \(error)")
         }
@@ -23,11 +23,22 @@ class NotificationsViewModel: ObservableObject {
 
     func refreshUnreadCount(staff: Staff) async {
         do {
-            let count = try await APIClient.shared.fetchUnreadNotificationCount(staff: staff)
-            unreadCount = count
+            // Fetch the list too so the badge can be scoped per-location
+            let result = try await APIClient.shared.fetchNotifications(staff: staff, limit: 50)
+            notifications = result
+            unreadCount = result.filter { !$0.isRead }.count
         } catch {
             // ignore
         }
+    }
+
+    /// Unread count scoped to a location. nil studio = all locations.
+    /// Notifications with no studio (or "All") are global and always count.
+    func unreadCount(studio: Studio?) -> Int {
+        guard let studio = studio else { return unreadCount }
+        return notifications.filter {
+            !$0.isRead && ($0.studio == nil || $0.studio == "All" || $0.studio == studio.rawValue)
+        }.count
     }
 
     func markAsRead(_ notification: AppNotification, staff: Staff) async {

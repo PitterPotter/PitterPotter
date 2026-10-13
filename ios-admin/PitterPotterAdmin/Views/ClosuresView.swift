@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ClosuresView: View {
     @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var bookingsVM: BookingsViewModel
     @State private var schoolHolidays: [HolidayRange] = []
     @State private var closedDates: [ClosedDateEntry] = []
     @State private var isLoading = false
@@ -15,7 +16,22 @@ struct ClosuresView: View {
     @State private var newClosedDate = Date()
     @State private var newClosedStudio = "Both"
 
-    private let studios = ["Both", "Putney", "Wimbledon"]
+    private var studios: [String] {
+        ["Both"] + (authVM.staff?.visibleStudios ?? Studio.allCases).map { $0.rawValue }
+    }
+
+    /// Closed dates relevant to the active location — a specific selection
+    /// still shows "Both" entries since they close that studio too.
+    private var visibleClosedDates: [ClosedDateEntry] {
+        guard let studio = bookingsVM.selectedStudio?.rawValue else { return closedDates }
+        return closedDates.filter { $0.studio == studio || $0.studio == "Both" }
+    }
+
+    private func removeClosedDate(_ entry: ClosedDateEntry) {
+        guard let idx = closedDates.firstIndex(where: { $0.date == entry.date && $0.studio == entry.studio }) else { return }
+        closedDates.remove(at: idx)
+        saveClosures()
+    }
 
     private let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -38,7 +54,12 @@ struct ClosuresView: View {
             }
             .navigationTitle("Holidays & Closures")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { loadClosures() }
+            .onAppear {
+                if let studio = bookingsVM.selectedStudio?.rawValue, studios.contains(studio) {
+                    newClosedStudio = studio
+                }
+                loadClosures()
+            }
         }
     }
 
@@ -100,13 +121,13 @@ struct ClosuresView: View {
 
     private var closedDatesSection: some View {
         Section(header: Text("Closed Dates"), footer: Text("No bookings will be accepted on these dates for the selected studio.")) {
-            if closedDates.isEmpty {
+            if visibleClosedDates.isEmpty {
                 Text("No closed dates set")
                     .font(AppFont.body(12, weight: .medium))
                     .foregroundStyle(PPBrand.charcoal.opacity(0.5))
             }
-            ForEach(closedDates.indices, id: \.self) { idx in
-                let entry = closedDates[idx]
+            ForEach(visibleClosedDates.indices, id: \.self) { idx in
+                let entry = visibleClosedDates[idx]
                 HStack {
                     Text(entry.date)
                         .font(AppFont.body(15, weight: .medium))
@@ -120,8 +141,7 @@ struct ClosuresView: View {
                         .foregroundStyle(entry.studio == "Both" ? .red : .orange)
                         .clipShape(Capsule())
                     Button(role: .destructive) {
-                        closedDates.remove(at: idx)
-                        saveClosures()
+                        removeClosedDate(entry)
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.red.opacity(0.6))

@@ -20,13 +20,18 @@ struct CalendarView: View {
         authVM.staff?.role == "super_admin" || authVM.staff?.canAddWalkIns == true
     }
 
+    /// Bookings scoped to the globally selected location (nil = all studios)
+    private var studioBookings: [Booking] {
+        bookingsVM.visibleBookings
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 if let dateStr = selectedDate {
                     DayDashboardView(
                         date: dateStr,
-                        bookings: bookingsVM.bookings,
+                        bookings: studioBookings,
                         onBack: { selectedDate = nil },
                         onUpdateStatus: { id, status in
                             Task {
@@ -45,7 +50,7 @@ struct CalendarView: View {
                 } else {
                     if searchText.isEmpty {
                     MonthCalendarView(
-                        bookings: bookingsVM.bookings,
+                        bookings: studioBookings,
                         selectedDate: selectedDate,
                         month: calendarMonth,
                         onMonthChange: { calendarMonth = $0 },
@@ -54,7 +59,7 @@ struct CalendarView: View {
                 }
 
                     BookingsListBelowCalendar(
-                        bookings: bookingsVM.bookings,
+                        bookings: studioBookings,
                         onTap: { booking in
                             selectedDate = booking.date
                         },

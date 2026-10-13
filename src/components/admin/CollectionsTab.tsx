@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Search, Camera, Users, Clock, MapPin, Check, Package, Phone, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertCircle, CheckSquare, Square, Plus, QrCode, Tag } from 'lucide-react';
 import { BookingInquiry } from '../../types';
@@ -13,6 +13,8 @@ export type CollectionStageOrNull = CollectionStage | null;
 
 interface CollectionsTabProps {
   bookings: BookingInquiry[];
+  studioFilter: 'all' | 'Putney' | 'Wimbledon';
+  onStudioFilterChange: (studio: 'all' | 'Putney' | 'Wimbledon') => void;
   loading: boolean;
   canUpdate: boolean;
   fixedStage: CollectionStage;
@@ -294,6 +296,8 @@ function BookingCard({
 
 export default function CollectionsTab({
   bookings,
+  studioFilter,
+  onStudioFilterChange,
   loading,
   canUpdate,
   fixedStage,
@@ -313,7 +317,6 @@ export default function CollectionsTab({
   const [modalImages, setModalImages] = useState<string[] | null>(null);
   const [modalIndex, setModalIndex] = useState(0);
   const [modalPhotoTags, setModalPhotoTags] = useState<Record<number, { label?: string; status: string; x: number; y: number }[]> | undefined>(undefined);
-  const [studioFilter, setStudioFilter] = useState<'all' | 'Putney' | 'Wimbledon'>('all');
   const [needsPhotoOnly, setNeedsPhotoOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -332,6 +335,11 @@ export default function CollectionsTab({
   const [showBulkTag, setShowBulkTag] = useState(false);
   const [bulkTagStatus, setBulkTagStatus] = useState('painted');
   const [bulkTagLabel, setBulkTagLabel] = useState('');
+
+  // New collection profiles default to the globally selected studio
+  useEffect(() => {
+    if (showAddProfile && studioFilter !== 'all') setProfileStudio(studioFilter);
+  }, [showAddProfile]);
 
   const eligible = useMemo(
     () => bookings.filter(b => b.status === 'completed'),
@@ -371,7 +379,7 @@ export default function CollectionsTab({
     setNameQuery('');
     setPhoneQuery('');
     setDateQuery('');
-    setStudioFilter('all');
+    onStudioFilterChange('all');
     setNeedsPhotoOnly(false);
   };
 
@@ -464,7 +472,7 @@ export default function CollectionsTab({
             {(['all', 'Putney', 'Wimbledon'] as const).map(s => (
               <button
                 key={s}
-                onClick={() => setStudioFilter(s)}
+                onClick={() => onStudioFilterChange(s)}
                 className={`px-2.5 py-1.5 text-[10px] font-bold transition-all cursor-pointer ${
                   studioFilter === s ? 'bg-[#DBE7E4] text-[#1B2D3C]' : 'bg-white text-[#1B2D3C]/50 hover:text-[#1B2D3C]'
                 }`}

@@ -7,7 +7,10 @@ struct CollectionsView: View {
     var initialStage: CollectionStage
     @State private var nameSearchText = ""
     @State private var phoneSearchText = ""
-    @State private var selectedStudio: Studio? = nil
+    private var selectedStudio: Studio? {
+        get { bookingsVM.selectedStudio }
+        nonmutating set { bookingsVM.selectedStudio = newValue }
+    }
     @State private var selectedBooking: Booking?
     @State private var showCamera = false
     @State private var isUploading = false
@@ -37,10 +40,9 @@ struct CollectionsView: View {
     }
 
     var filteredBookings: [Booking] {
-        bookingsVM.bookings.filter { b in
+        bookingsVM.visibleBookings.filter { b in
             guard b.status == "completed" else { return false }
             guard b.collectionStatus == initialStage.rawValue else { return false }
-            if let studio = selectedStudio, b.studio != studio.rawValue { return false }
             if !nameSearchText.isEmpty {
                 let q = nameSearchText.lowercased()
                 if !b.name.lowercased().contains(q) { return false }
@@ -286,11 +288,7 @@ struct CollectionsView: View {
     }
 
     private var availableStudios: [Studio] {
-        guard let staff = authVM.staff else { return Studio.allCases }
-        if let allowed = staff.allowedStudios, !allowed.isEmpty {
-            return allowed.compactMap { Studio(rawValue: $0) }
-        }
-        return Studio.allCases
+        authVM.staff?.visibleStudios ?? Studio.allCases
     }
 
     private var isSuperAdmin: Bool {
@@ -304,7 +302,7 @@ struct CollectionsView: View {
     }
 
     private func countForStage(_ stage: CollectionStage) -> Int {
-        bookingsVM.bookings.filter { $0.status == "completed" && $0.collectionStatus == stage.rawValue }.count
+        bookingsVM.visibleBookings.filter { $0.status == "completed" && $0.collectionStatus == stage.rawValue }.count
     }
 
     private func handleScannedCode(_ code: String) {
@@ -2760,11 +2758,7 @@ struct AddProfileSheet: View {
     }
 
     private var availableStudios: [Studio] {
-        guard let staff = authVM.staff else { return Studio.allCases }
-        if let allowed = staff.allowedStudios, !allowed.isEmpty {
-            return allowed.compactMap { Studio(rawValue: $0) }
-        }
-        return Studio.allCases
+        authVM.staff?.visibleStudios ?? Studio.allCases
     }
 
     var body: some View {
@@ -2821,9 +2815,8 @@ struct AddProfileSheet: View {
                 }
             }
             .onAppear {
-                if let s = availableStudios.first {
-                    studio = s
-                }
+                studio = bookingsVM.selectedStudio.flatMap { availableStudios.contains($0) ? $0 : nil }
+                    ?? availableStudios.first ?? .Putney
             }
             .sheet(isPresented: $showCamera) {
                 CameraPicker { data in

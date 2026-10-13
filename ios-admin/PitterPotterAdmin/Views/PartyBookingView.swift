@@ -22,11 +22,7 @@ struct PartyBookingView: View {
     @State private var loadedSlots: TimeSlotsData?
 
     private var availableStudios: [Studio] {
-        guard let staff = authVM.staff else { return Studio.allCases }
-        if let allowed = staff.allowedStudios, !allowed.isEmpty {
-            return allowed.compactMap { Studio(rawValue: $0) }
-        }
-        return Studio.allCases
+        authVM.staff?.visibleStudios ?? Studio.allCases
     }
 
     private var partyTimeSlots: [String] {
@@ -154,7 +150,8 @@ struct PartyBookingView: View {
             .navigationTitle("New Party Booking")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                if let first = availableStudios.first { selectedStudio = first }
+                selectedStudio = bookingsVM.selectedStudio.flatMap { availableStudios.contains($0) ? $0 : nil }
+                    ?? availableStudios.first ?? .Putney
                 if let first = partyTimeSlots.first { time = first }
                 loadTimeSlots()
             }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { format, parseISO, isToday, isFuture, isPast, differenceInCalendarDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { Calendar, Users, Clock, Package, Check, Camera, Gift, TrendingUp, ChevronRight, MapPin, DollarSign } from 'lucide-react';
 import { BookingInquiry, GiftCard } from '../../types';
@@ -9,6 +9,8 @@ interface DashboardSummaryProps {
   giftCards: GiftCard[];
   isSuperAdmin: boolean;
   staffAllowedStudios: ('Putney' | 'Wimbledon')[] | null;
+  studioToggle: 'all' | 'Putney' | 'Wimbledon';
+  onStudioToggleChange: (studio: 'all' | 'Putney' | 'Wimbledon') => void;
   onNavigateToBookings: () => void;
   onNavigateToPainted: () => void;
   onNavigateToReady: () => void;
@@ -33,13 +35,14 @@ export default function DashboardSummary({
   giftCards,
   isSuperAdmin,
   staffAllowedStudios,
+  studioToggle,
+  onStudioToggleChange,
   onNavigateToBookings,
   onNavigateToPainted,
   onNavigateToReady,
   onNavigateToCollected,
   onNavigateToAddBooking,
 }: DashboardSummaryProps) {
-  const [studioToggle, setStudioToggle] = useState<'all' | 'Putney' | 'Wimbledon'>('all');
 
   const scopedBookings = useMemo(() => {
     let result = bookings;
@@ -177,7 +180,7 @@ export default function DashboardSummary({
                 .map(s => (
                   <button
                     key={s}
-                    onClick={() => setStudioToggle(s)}
+                    onClick={() => onStudioToggleChange(s)}
                     className={`px-2.5 py-1.5 text-[10px] font-bold transition-all cursor-pointer ${
                       studioToggle === s ? 'bg-[#DBE7E4] text-[#1B2D3C]' : 'bg-white text-[#1B2D3C]/50 hover:text-[#1B2D3C]'
                     }`}

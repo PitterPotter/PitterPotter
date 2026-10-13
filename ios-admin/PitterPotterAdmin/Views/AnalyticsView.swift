@@ -6,9 +6,9 @@ struct AnalyticsView: View {
     @State private var giftCards: [GiftCard] = []
     @State private var isLoading = false
 
-    private var totalBookings: Int { bookingsVM.bookings.count }
-    private var confirmedCount: Int { bookingsVM.bookings.filter { $0.status == "confirmed" }.count }
-    private var pendingCount: Int { bookingsVM.bookings.filter { $0.status == "pending" }.count }
+    private var totalBookings: Int { bookingsVM.visibleBookings.count }
+    private var confirmedCount: Int { bookingsVM.visibleBookings.filter { $0.status == "confirmed" }.count }
+    private var pendingCount: Int { bookingsVM.visibleBookings.filter { $0.status == "pending" }.count }
 
     private var giftCardRevenue: Double { giftCards.reduce(0) { $0 + $1.amount } }
     private var activeGiftCards: Int { giftCards.filter { $0.status == "active" }.count }
@@ -18,17 +18,17 @@ struct AnalyticsView: View {
     private var bookingsByMonth: [(month: String, count: Int)] {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM"
-        let groups = Dictionary(grouping: bookingsVM.bookings) { formatter.string(from: ISO8601DateFormatter().date(from: $0.createdAt ?? "") ?? Date()) }
+        let groups = Dictionary(grouping: bookingsVM.visibleBookings) { formatter.string(from: ISO8601DateFormatter().date(from: $0.createdAt ?? "") ?? Date()) }
         return groups.map { (month: $0.key, count: $0.value.count) }.sorted { $0.month < $1.month }.suffix(6).map { $0 }
     }
 
     private var popularDates: [(date: String, count: Int)] {
-        let groups = Dictionary(grouping: bookingsVM.bookings) { $0.date }
+        let groups = Dictionary(grouping: bookingsVM.visibleBookings) { $0.date }
         return groups.map { (date: $0.key, count: $0.value.count) }.sorted { $0.count > $1.count }.prefix(5).map { $0 }
     }
 
     private var studioCounts: [(studio: String, count: Int)] {
-        let groups = Dictionary(grouping: bookingsVM.bookings) { $0.studio }
+        let groups = Dictionary(grouping: bookingsVM.visibleBookings) { $0.studio }
         return groups.map { (studio: $0.key, count: $0.value.count) }.sorted { $0.count > $1.count }
     }
 

@@ -2,8 +2,18 @@ import SwiftUI
 
 struct NotificationsView: View {
     @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var bookingsVM: BookingsViewModel
     @StateObject private var notificationsVM = NotificationsViewModel()
     @Environment(\.dismiss) var dismiss
+
+    /// Notifications scoped to the active location — global ones (no studio
+    /// or "All") always show.
+    private var visibleNotifications: [AppNotification] {
+        guard let studio = bookingsVM.selectedStudio else { return notificationsVM.notifications }
+        return notificationsVM.notifications.filter {
+            $0.studio == nil || $0.studio == "All" || $0.studio == studio.rawValue
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -16,7 +26,7 @@ struct NotificationsView: View {
                             .font(PPBrand.bodyFontSmall)
                             .foregroundStyle(PPBrand.charcoal.opacity(0.5))
                     }
-                } else if notificationsVM.notifications.isEmpty {
+                } else if visibleNotifications.isEmpty {
                     EmptyStateView(
                         icon: "bell.slash",
                         title: "No Notifications",
@@ -24,7 +34,7 @@ struct NotificationsView: View {
                     )
                 } else {
                     List {
-                        if notificationsVM.unreadCount > 0 {
+                        if visibleNotifications.contains(where: { !$0.isRead }) {
                             Section {
                                 Button {
                                     Task {
@@ -43,7 +53,7 @@ struct NotificationsView: View {
                         }
 
                         Section {
-                            ForEach(notificationsVM.notifications) { notif in
+                            ForEach(visibleNotifications) { notif in
                                 NotificationRow(notification: notif)
                                     .onTapGesture {
                                         guard let staff = authVM.staff else { return }

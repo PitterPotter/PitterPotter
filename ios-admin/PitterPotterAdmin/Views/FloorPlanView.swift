@@ -808,10 +808,7 @@ struct FloorPlanTabView: View {
     @State private var date: Date = Date()
 
     private var availableStudios: [Studio] {
-        if let allowed = authVM.staff?.allowedStudios, !allowed.isEmpty {
-            return allowed.compactMap { Studio(rawValue: $0) }
-        }
-        return Studio.allCases
+        authVM.staff?.visibleStudios ?? Studio.allCases
     }
 
     private var dateString: String {
@@ -872,6 +869,18 @@ struct FloorPlanTabView: View {
                     moveBooking(bookingId, to: tableId)
                 }
             )
+            .onAppear {
+                if let selected = bookingsVM.selectedStudio, availableStudios.contains(selected) {
+                    studio = selected
+                } else if let first = availableStudios.first {
+                    studio = first
+                }
+            }
+            .onChange(of: bookingsVM.selectedStudio) { newValue in
+                if let selected = newValue, availableStudios.contains(selected), selected != studio {
+                    studio = selected
+                }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(PPBrand.sage.opacity(0.3))

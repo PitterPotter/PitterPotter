@@ -23,6 +23,19 @@ struct Staff: Codable, Identifiable {
         case allowedStudios
         case sessionToken
     }
+
+    var isSuperAdmin: Bool { role == "super_admin" }
+
+    /// Studios this staff member can see. Super admins always see all
+    /// studios; other staff are restricted to `allowedStudios` (empty/nil
+    /// means all).
+    var visibleStudios: [Studio] {
+        if isSuperAdmin { return Studio.allCases }
+        guard let allowed = allowedStudios, !allowed.isEmpty else {
+            return Studio.allCases
+        }
+        return allowed.compactMap { Studio(rawValue: $0) }
+    }
 }
 
 // MARK: - Staff Member (for staff management)

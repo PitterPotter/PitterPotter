@@ -26,8 +26,8 @@ struct SettingsView: View {
                                     .background(PPBrand.charcoal.opacity(0.2))
                                     .foregroundStyle(PPBrand.charcoal)
                                     .clipShape(Capsule())
-                                if let studios = authVM.staff?.allowedStudios, !studios.isEmpty {
-                                    Text(studios.joined(separator: ", "))
+                                if let studios = authVM.staff?.visibleStudios, !studios.isEmpty {
+                                    Text(studios.map { $0.rawValue }.joined(separator: ", "))
                                         .font(AppFont.body(11, weight: .medium))
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 2)

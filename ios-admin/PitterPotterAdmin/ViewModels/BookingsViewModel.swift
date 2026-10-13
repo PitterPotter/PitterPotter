@@ -9,7 +9,14 @@ class BookingsViewModel: ObservableObject {
     @Published var isOffline = false
 
     // Filters
-    @Published var selectedStudio: Studio? = nil
+    /// Global studio filter — drives the location switcher in the header and
+    /// is shared by all views. nil means "All studios". Persisted so the
+    /// chosen location survives app restarts.
+    @Published var selectedStudio: Studio? = nil {
+        didSet {
+            UserDefaults.standard.set(selectedStudio?.rawValue, forKey: Self.studioDefaultsKey)
+        }
+    }
     @Published var selectedStatus: BookingStatus? = nil
     @Published var searchText: String = ""
     @Published var selectedDate: Date? = nil
@@ -30,12 +37,28 @@ class BookingsViewModel: ObservableObject {
         case createdDesc = "Recently Created"
     }
 
+    private static let studioDefaultsKey = "pp_active_studio"
+
     private let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("bookings_cache.json")
     private static let sharedDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+
+    init() {
+        if let raw = UserDefaults.standard.string(forKey: Self.studioDefaultsKey) {
+            selectedStudio = Studio(rawValue: raw)
+        }
+    }
+
+    /// Bookings scoped to the active location (selectedStudio). All display
+    /// surfaces should use this; `bookings` stays unfiltered for id/token
+    /// lookups (scanner, detail fetches, status updates).
+    var visibleBookings: [Booking] {
+        guard let studio = selectedStudio else { return bookings }
+        return bookings.filter { $0.studio == studio.rawValue }
+    }
 
     var filteredBookings: [Booking] {
         let todayStr = Self.sharedDateFormatter.string(from: Date())

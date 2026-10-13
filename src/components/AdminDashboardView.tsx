@@ -6,7 +6,7 @@ import WimbledonFloorPlan from './WimbledonFloorPlan';
 import PutneyFloorPlan from './PutneyFloorPlan';
 import { allocateResources as allocateResourcesFromBookings, formatResources, isPartySessionType } from '../lib/allocation';
 import { findAvailablePutneyTable, findMultiplePutneyTables } from './PutneyFloorPlan';
-import { Calendar, Clock, Users, Mail, Phone, LogOut, Trash2, CheckCircle, XCircle, Plus, Copy, Inbox, Gift, ChevronUp, ChevronDown, X as XIcon, Pencil, Lock, Camera, ScanLine, AlertCircle, Package, Check, Wine, Loader2 } from 'lucide-react';
+import { Calendar, Clock, Users, Mail, Phone, LogOut, Trash2, CheckCircle, XCircle, Plus, Copy, Inbox, Gift, ChevronUp, ChevronDown, X as XIcon, Pencil, Lock, Camera, ScanLine, AlertCircle, Package, Check, Wine, Loader2, MapPin } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
 import { format, isSameDay, parseISO, getDay } from 'date-fns';
 import { BookingInquiry, GiftCard, Staff, AuditLog, GiftCardApiRow, StaffApiRow, EmailTemplate, SMSTemplate, EmailLog } from '../types';
@@ -171,9 +171,11 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [showAddModal, setShowAddModal] = useState(false);
   const [lockedSessionType, setLockedSessionType] = useState<string | null>(null);
   const [newCollectionStage, setNewCollectionStage] = useState<'none' | 'painted' | 'ready' | 'collected'>('none');
-  const defaultStudio = (staff.allowedStudios && staff.allowedStudios.length > 0 && staff.role !== 'super_admin')
-    ? staff.allowedStudios[0]
-    : 'Putney';
+  const defaultStudio: 'Putney' | 'Wimbledon' = studioFilter !== 'all'
+    ? studioFilter
+    : (staff.allowedStudios && staff.allowedStudios.length > 0 && staff.role !== 'super_admin')
+      ? staff.allowedStudios[0]
+      : 'Putney';
   const [newBooking, setNewBooking] = useState<Partial<BookingInquiry>>({
     studio: defaultStudio,
     name: '',
@@ -1520,6 +1522,21 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     }
   };
 
+  // Global location scope — the header switcher drives `studioFilter` and every studio-specific
+  // surface reads from `scopedInquiries`. Keep `inquiries` (unfiltered) for id/token lookups so a
+  // booking stays actionable after switching location mid-task.
+  const scopedInquiries = useMemo(() =>
+    studioFilter === 'all' ? inquiries : inquiries.filter((i) => i.studio === studioFilter),
+  [inquiries, studioFilter]);
+
+  // Studio-scoped settings data — kept index-safe so edits/deletes still hit the right row
+  const visibleCapacityRows = capacityRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => studioFilter === 'all' || row.studio === studioFilter);
+  const visibleClosedDates = closures.closedDates
+    .map((entry, idx) => ({ entry, idx }))
+    .filter(({ entry }) => studioFilter === 'all' || entry.studio === 'Both' || entry.studio === studioFilter);
+
   const filteredInquiries = useMemo(() => inquiries
     .filter((inq) => {
       const statusMatch = filter === 'all' || inq.status === (filter === 'cancelled' ? 'cancelled' : filter);
@@ -1568,10 +1585,10 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const bookingsForSelectedDate = selectedDate ? getBookingsForDate(selectedDate) : [];
 
   const stats = {
-    total: inquiries.length,
-    pending: inquiries.filter((i) => i.status === 'pending').length,
-    confirmed: inquiries.filter((i) => i.status === 'confirmed').length,
-    paintedNoPhoto: inquiries.filter(i =>
+    total: scopedInquiries.length,
+    pending: scopedInquiries.filter((i) => i.status === 'pending').length,
+    confirmed: scopedInquiries.filter((i) => i.status === 'confirmed').length,
+    paintedNoPhoto: scopedInquiries.filter(i =>
       i.status === 'completed' &&
       (!i.collectionStatus || i.collectionStatus === 'painted') &&
       (!i.photos || i.photos.length === 0)
@@ -1607,6 +1624,34 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
   const staffAllowedStudios: ('Putney' | 'Wimbledon')[] | null =
     isSuperAdmin ? null : (staff.allowedStudios && staff.allowedStudios.length > 0 ? staff.allowedStudios : null);
+
+  // Studios this staff member may see — super admins get both, everyone else their allowed list
+  const visibleStudios: ('Putney' | 'Wimbledon')[] = staffAllowedStudios ?? ['Putney', 'Wimbledon'];
+
+  // Clamp the global selection if it falls outside this staff member's visible studios
+  useEffect(() => {
+    if (studioFilter !== 'all' && !visibleStudios.includes(studioFilter)) setStudioFilter('all');
+  }, [studioFilter, staff]);
+
+  // Floor plan, time slots, and closures follow the global switcher when a studio is picked
+  const effectiveFloorPlanStudio: 'Putney' | 'Wimbledon' =
+    studioFilter !== 'all' ? studioFilter : floorPlanStudio;
+  useEffect(() => {
+    if (studioFilter !== 'all' && studioFilter !== timeSlotStudio) setTimeSlotStudio(studioFilter);
+    if (studioFilter !== 'all') setNewClosedStudio(studioFilter);
+  }, [studioFilter]);
+
+  // New-booking and ghost-booking forms default to the globally selected studio
+  useEffect(() => {
+    if (showAddModal && studioFilter !== 'all' && newBooking.sessionType !== 'sip-and-paint') {
+      setNewBooking(prev => prev.studio === studioFilter ? prev : { ...prev, studio: studioFilter });
+    }
+  }, [showAddModal]);
+  useEffect(() => {
+    if (showGhostModal && studioFilter !== 'all') {
+      setGhostBooking(prev => prev.studio === studioFilter ? prev : { ...prev, studio: studioFilter });
+    }
+  }, [showGhostModal]);
 
   const canEdit = isSuperAdmin || staff.canEditBookings;
   const canUpdateStatus = isSuperAdmin || staff.canUpdateStatus;
@@ -2719,6 +2764,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             )}
             <NotificationBell
               staff={staff}
+              studioFilter={studioFilter}
               onNavigate={(tab, entityId) => {
                 setActiveTab(tab as typeof activeTab);
                 if (entityId && tab === 'bookings') {
@@ -2754,6 +2800,24 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             </button>
           </div>
         </div>
+        {visibleStudios.length > 1 && (
+          <div className="max-w-7xl mx-auto flex items-center gap-1.5 mt-2.5">
+            <MapPin className="w-3.5 h-3.5 text-[#1B2D3C]/50" />
+            {(['all', ...visibleStudios] as ('all' | 'Putney' | 'Wimbledon')[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStudioFilter(s)}
+                className={`px-3 py-1.5 text-[10px] font-bold rounded-full transition-all cursor-pointer border ${
+                  studioFilter === s
+                    ? 'bg-[#1B2D3C] text-white border-[#1B2D3C]'
+                    : 'bg-white/60 text-[#1B2D3C]/60 border-[#1B2D3C]/10 hover:bg-white hover:text-[#1B2D3C]'
+                }`}
+              >
+                {s === 'all' ? 'All Locations' : s}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {!isOnline && (
@@ -2835,10 +2899,12 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
         {!loading && activeTab === 'dashboard' && (
           <DashboardSummary
-            bookings={inquiries}
+            bookings={scopedInquiries}
             giftCards={giftCards}
             isSuperAdmin={isSuperAdmin}
             staffAllowedStudios={staffAllowedStudios}
+            studioToggle={studioFilter}
+            onStudioToggleChange={setStudioFilter}
             onNavigateToBookings={() => setActiveTab('bookings')}
             onNavigateToPainted={() => setActiveTab('painted')}
             onNavigateToReady={() => setActiveTab('ready')}
@@ -3042,7 +3108,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
         {activeTab === 'bookings' && (
           <>
         <DashboardOverview
-          bookings={inquiries}
+          bookings={scopedInquiries}
           onAssignTable={(bookingId, tableId) => {
             const booking = inquiries.find(i => i.id === bookingId);
             if (!booking) return;
@@ -3099,10 +3165,10 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             { value: 'baby-prints', label: 'Baby Prints' },
             { value: 'party', label: 'Party' },
           ] as const).map(({ value, label }) => {
-            const count = value === 'all' ? inquiries.length
-              : value === 'painting' ? inquiries.filter(i => ['painting', 'sip-and-paint'].includes(i.sessionType || '')).length
-              : value === 'baby-prints' ? inquiries.filter(i => i.sessionType === 'clay-imprints').length
-              : inquiries.filter(i => ['birthday-party','baby-shower-hen','corporate'].includes(i.sessionType || '')).length;
+            const count = value === 'all' ? scopedInquiries.length
+              : value === 'painting' ? scopedInquiries.filter(i => ['painting', 'sip-and-paint'].includes(i.sessionType || '')).length
+              : value === 'baby-prints' ? scopedInquiries.filter(i => i.sessionType === 'clay-imprints').length
+              : scopedInquiries.filter(i => ['birthday-party','baby-shower-hen','corporate'].includes(i.sessionType || '')).length;
             return (
               <button
                 key={value}
@@ -3515,18 +3581,16 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             <div className="flex flex-wrap items-center gap-3 bg-white border border-[#1B2D3C]/10 p-4 rounded-xl">
               <h2 className="font-heading text-lg font-black text-[#1B2D3C] mr-2">Floor Plan</h2>
               {(() => {
-                const floorPlanStudios = (staff.allowedStudios && staff.allowedStudios.length > 0
-                  ? staff.allowedStudios
-                  : ['Putney', 'Wimbledon']) as ('Putney' | 'Wimbledon')[];
-                return floorPlanStudios.length > 1 ? (
+                // Only offer a local studio picker while the global switcher is on "All Locations"
+                return studioFilter === 'all' && visibleStudios.length > 1 ? (
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-bold uppercase text-[#1B2D3C]/60">Studio</label>
                     <select
-                      value={floorPlanStudio}
+                      value={effectiveFloorPlanStudio}
                       onChange={(e) => setFloorPlanStudio(e.target.value as 'Putney' | 'Wimbledon')}
                       className="px-3 py-2 border border-[#1B2D3C]/20 rounded-lg text-xs font-bold text-[#1B2D3C] focus:outline-none focus:border-[#1B2D3C]/50 cursor-pointer"
                     >
-                      {floorPlanStudios.map(s => <option key={s} value={s}>{s}</option>)}
+                      {visibleStudios.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                 ) : null;
@@ -3549,16 +3613,16 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               <p className="text-[10px] text-[#1B2D3C]/40 font-semibold ml-auto">Click a table or chip for details · click an unassigned booking then a table (or drag) to assign</p>
             </div>
             <div className="bg-white border border-[#1B2D3C]/10 p-4 rounded-xl overflow-x-auto">
-              {floorPlanStudio === 'Wimbledon' ? (
+              {effectiveFloorPlanStudio === 'Wimbledon' ? (
                 <WimbledonFloorPlan
-                  bookings={inquiries}
+                  bookings={scopedInquiries}
                   selectedDate={floorPlanDate}
                   readOnly
                   onMoveBooking={(bookingId, tableId) => updateBookingTable(bookingId, tableId)}
                 />
               ) : (
                 <PutneyFloorPlan
-                  bookings={inquiries}
+                  bookings={scopedInquiries}
                   selectedDate={floorPlanDate}
                   readOnly
                   onMoveBooking={(bookingId, tableId) => updateBookingTable(bookingId, tableId)}
@@ -4919,7 +4983,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               <h2 className="font-heading text-lg font-black text-[#1B2D3C]">Capacity</h2>
               <p className="text-xs text-[#1B2D3C]/70 mt-1">Maximum seats per studio and session type.</p>
             </div>
-            {capacityRows.length === 0 ? (
+            {visibleCapacityRows.length === 0 ? (
               <div className="space-y-3">
                 <Skeleton className="h-16" />
                 <Skeleton className="h-16" />
@@ -4927,7 +4991,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               </div>
             ) : (
               <div className="space-y-3">
-                {capacityRows.map((row, index) => (
+                {visibleCapacityRows.map(({ row, index }) => (
                   <div key={`${row.studio}-${row.session_type}`} className="flex items-center gap-4 p-4 bg-[#DBE7E4]/30 rounded-lg">
                     <div className="flex-1">
                       <p className="text-[10px] font-bold uppercase text-[#1B2D3C]/50">Studio</p>
@@ -4975,7 +5039,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
             <div className="flex flex-wrap gap-4 items-center">
               <div className="flex gap-2">
-                {(['Putney', 'Wimbledon'] as Studio[]).map((studio) => (
+                {(studioFilter === 'all' ? visibleStudios : [studioFilter]).map((studio) => (
                   <button
                     key={studio}
                     onClick={() => setTimeSlotStudio(studio)}
@@ -5203,8 +5267,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             <div className="space-y-3">
               <h3 className="text-sm font-black text-[#1B2D3C] uppercase tracking-wider">Closed Dates <span className="text-[#1B2D3C]/40 font-medium normal-case tracking-normal">(no bookings on that day)</span></h3>
               <div className="flex flex-wrap gap-2">
-                {closures.closedDates.length === 0 && <p className="text-xs text-[#1B2D3C]/40 italic">No closed dates set</p>}
-                {closures.closedDates.map((entry, idx) => (
+                {visibleClosedDates.length === 0 && <p className="text-xs text-[#1B2D3C]/40 italic">No closed dates set</p>}
+                {visibleClosedDates.map(({ entry, idx }) => (
                   <span key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-100 text-red-800 text-xs font-bold rounded-lg">
                     {entry.date}
                     <span className="px-1.5 py-0.5 bg-red-200 text-red-700 text-[10px] rounded">{entry.studio}</span>
@@ -5228,9 +5292,18 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   onChange={e => setNewClosedStudio(e.target.value as 'Putney' | 'Wimbledon' | 'Both')}
                   className="px-3 py-2 border border-[#1B2D3C]/20 text-xs font-bold text-[#1B2D3C] rounded-lg focus:outline-none focus:border-[#1B2D3C]/50 cursor-pointer"
                 >
-                  <option value="Both">Both Studios</option>
-                  <option value="Putney">Putney Only</option>
-                  <option value="Wimbledon">Wimbledon Only</option>
+                  {studioFilter === 'all' ? (
+                    <>
+                      <option value="Both">Both Studios</option>
+                      <option value="Putney">Putney Only</option>
+                      <option value="Wimbledon">Wimbledon Only</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value={studioFilter}>{studioFilter} Only</option>
+                      <option value="Both">Both Studios</option>
+                    </>
+                  )}
                 </select>
                 <button
                   onClick={async () => {
@@ -5565,8 +5638,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               <div className="space-y-3">
                 <h3 className="text-sm font-black text-[#1B2D3C] uppercase tracking-wider">Closed Dates <span className="text-[#1B2D3C]/40 font-medium normal-case tracking-normal">(no bookings on that day)</span></h3>
                 <div className="flex flex-wrap gap-2">
-                  {closures.closedDates.length === 0 && <p className="text-xs text-[#1B2D3C]/40 italic">No closed dates set</p>}
-                  {closures.closedDates.map((entry, idx) => (
+                  {visibleClosedDates.length === 0 && <p className="text-xs text-[#1B2D3C]/40 italic">No closed dates set</p>}
+                  {visibleClosedDates.map(({ entry, idx }) => (
                     <span key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-100 text-red-800 text-xs font-bold rounded-lg">
                       {entry.date}
                       <span className="px-1.5 py-0.5 bg-red-200 text-red-700 text-[10px] rounded">{entry.studio}</span>
@@ -5590,9 +5663,18 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                     onChange={e => setNewClosedStudio(e.target.value as 'Putney' | 'Wimbledon' | 'Both')}
                     className="px-3 py-2 border border-[#1B2D3C]/20 text-xs font-bold text-[#1B2D3C] rounded-lg focus:outline-none focus:border-[#1B2D3C]/50 cursor-pointer"
                   >
-                    <option value="Both">Both Studios</option>
-                    <option value="Putney">Putney Only</option>
-                    <option value="Wimbledon">Wimbledon Only</option>
+                    {studioFilter === 'all' ? (
+                      <>
+                        <option value="Both">Both Studios</option>
+                        <option value="Putney">Putney Only</option>
+                        <option value="Wimbledon">Wimbledon Only</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value={studioFilter}>{studioFilter} Only</option>
+                        <option value="Both">Both Studios</option>
+                      </>
+                    )}
                   </select>
                   <button
                     onClick={async () => {
@@ -5692,7 +5774,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
       {activeTab === 'painted' && (
         <CollectionsTab
-          bookings={inquiries}
+          bookings={scopedInquiries}
+          studioFilter={studioFilter}
+          onStudioFilterChange={setStudioFilter}
           loading={loading}
           canUpdate={canEdit}
           fixedStage="painted"
@@ -5709,7 +5793,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
       {activeTab === 'ready' && (
         <CollectionsTab
-          bookings={inquiries}
+          bookings={scopedInquiries}
+          studioFilter={studioFilter}
+          onStudioFilterChange={setStudioFilter}
           loading={loading}
           canUpdate={canEdit}
           fixedStage="ready"
@@ -5726,7 +5812,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
       {activeTab === 'collected' && (
         <CollectionsTab
-          bookings={inquiries}
+          bookings={scopedInquiries}
+          studioFilter={studioFilter}
+          onStudioFilterChange={setStudioFilter}
           loading={loading}
           canUpdate={canEdit}
           fixedStage="collected"
@@ -5741,7 +5829,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       )}
 
       {activeTab === 'analytics' && canManageStaff && (
-        <AnalyticsTab inquiries={inquiries} giftCards={giftCards} />
+        <AnalyticsTab inquiries={scopedInquiries} giftCards={giftCards} />
       )}
 
       {activeTab === 'audit-logs' && canManageStaff && (

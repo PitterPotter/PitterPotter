@@ -145,6 +145,10 @@ struct RootView: View {
             isLoading = false
             return
         }
+        // Clamp persisted studio filter to what this staff member can see
+        if let selected = bookingsVM.selectedStudio, !staff.visibleStudios.contains(selected) {
+            bookingsVM.selectedStudio = nil
+        }
         loadError = nil
         loadProgress = 0
         loadStep = "Loading cache…"

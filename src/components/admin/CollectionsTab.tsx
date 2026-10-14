@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Search, Camera, Users, Clock, MapPin, Check, Package, Phone, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertCircle, CheckSquare, Square, Plus, QrCode, Tag } from 'lucide-react';
+import { Search, Bell, Camera, Users, Clock, MapPin, Check, Package, Phone, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertCircle, CheckSquare, Square, Plus, QrCode, Tag } from 'lucide-react';
 import { BookingInquiry } from '../../types';
 import Skeleton from '../Skeleton';
 import ImageModal from '../ImageModal';
@@ -133,6 +133,9 @@ function BookingCard({
             <span className="flex items-center gap-0.5"><Users className="w-3 h-3" />{booking.paintersCount}</span>
             <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{booking.studio}</span>
             {booking.phone && <span className="flex items-center gap-0.5"><Phone className="w-3 h-3" />{booking.phone}</span>}
+            {stage === 'ready' && booking.readyAt && (
+              <span className="flex items-center gap-0.5 text-blue-600"><Bell className="w-3 h-3" />Notified {format(parseISO(booking.readyAt), 'd MMM, HH:mm')}</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">

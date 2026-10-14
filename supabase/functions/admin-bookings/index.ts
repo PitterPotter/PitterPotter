@@ -133,6 +133,7 @@ function toBookingInquiry(row: any): any {
     photos: row.photos || undefined,
     photoTags: row.photo_tags || undefined,
     collectionStatus: row.collection_status || undefined,
+    readyAt: row.ready_at || undefined,
     collectedAt: row.collected_at || undefined,
     managementToken: row.management_token || undefined,
   };
@@ -177,6 +178,7 @@ function toBookingRow(booking: any): any {
     photos: opt(booking.photos),
     photo_tags: opt(booking.photoTags),
     collection_status: opt(booking.collectionStatus),
+    ready_at: opt(booking.readyAt),
     collected_at: opt(booking.collectedAt),
   };
 }
@@ -574,20 +576,13 @@ Deno.serve(async (req) => {
       if (error) throw error;
       await logAudit(supabase, staff, 'update_status', 'booking', id, { status });
 
-      // Create notification for status changes
+      // Only cancellations still notify — routine status changes (seated,
+      // completed, etc.) are silent so the feed stays bookings + vouchers.
       if (status === 'cancelled') {
         await createNotification(supabase, {
           type: 'booking_cancelled',
           title: 'Booking Cancelled',
           message: `${staff.name} cancelled booking ${id}`,
-          entityType: 'booking',
-          entityId: id,
-        });
-      } else {
-        await createNotification(supabase, {
-          type: 'booking_status_changed',
-          title: 'Booking Status Updated',
-          message: `${staff.name} marked booking ${id} as ${status}`,
           entityType: 'booking',
           entityId: id,
         });
@@ -769,7 +764,7 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      const { collectionStatus, collectedAt, location } = body;
+      const { collectionStatus, collectedAt, readyAt, location } = body;
       if (!isNonEmptyString(id) || !isOneOf(collectionStatus, ['painted', 'ready', 'collected'] as const)) {
         return new Response(JSON.stringify({ error: 'Invalid booking id or collection status' }), {
           status: 400,
@@ -801,6 +796,15 @@ Deno.serve(async (req) => {
         updates.collected_at = collectedAt;
       } else {
         updates.collected_at = null;
+      }
+      // ready_at: stamped when marked ready (send-collection-ready re-stamps
+      // with the true send time), cleared when moved back to painted, kept on collected
+      if (collectionStatus === 'ready') {
+        updates.ready_at = isNonEmptyString(readyAt) ? readyAt : new Date().toISOString();
+      } else if (isNonEmptyString(readyAt)) {
+        updates.ready_at = readyAt;
+      } else if (collectionStatus !== 'collected') {
+        updates.ready_at = null;
       }
 
       // Merge the location tag server-side so photos/tags are never overwritten by a stale client copy

@@ -4,7 +4,6 @@ import { loadEmailTemplate, renderTemplate } from '../_shared/email-template.ts'
 import { loadSMSTemplate } from '../_shared/sms-template.ts';
 import { getStudioInfo } from '../_shared/studio-info.ts';
 import { corsHeaders as makeCorsHeaders, optionsResponse } from '../_shared/cors.ts';
-import { createNotification } from '../_shared/notifications.ts';
 import { getConfiguredSMSProvider, sendSMS } from '../_shared/sms-provider.ts';
 
 const SESSION_LABELS: Record<string, string> = {
@@ -417,15 +416,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create admin notification for collection ready
-    await createNotification(supabase, {
-      type: 'collection_ready',
-      title: 'Pottery Ready for Collection',
-      message: `${booking.name} — ${booking.studio}, booking ${bookingId}`,
-      entityType: 'booking',
-      entityId: bookingId,
-      studio: booking.studio,
-    });
+    // Stamp when the customer was notified — shown on Ready cards in admin
+    const { error: stampErr } = await supabase
+      .from('bookings')
+      .update({ ready_at: new Date().toISOString() })
+      .eq('booking_id', bookingId);
+    if (stampErr) console.error('Failed to stamp ready_at:', stampErr);
 
     return new Response(JSON.stringify({ success: true, ...results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

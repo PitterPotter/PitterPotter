@@ -951,6 +951,12 @@ struct CollectionCard: View {
                         .font(AppFont.body(10, weight: .semibold))
                         .lineLimit(1)
                 }
+                if stage == .ready, let readyAt = booking.readyAt {
+                    Label("Notified \(PPDateDisplay.dateTime(readyAt))", systemImage: "bell")
+                        .font(AppFont.body(10, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.2, green: 0.5, blue: 0.9))
+                        .lineLimit(1)
+                }
             }
             .foregroundStyle(PPBrand.charcoal.opacity(0.6))
 
@@ -2519,6 +2525,8 @@ struct CollectionDetailSheet: View {
                 await MainActor.run {
                     var updated = bookingsVM.bookings.first(where: { $0.id == booking.id }) ?? booking
                     updated.collectionStatus = newStage.rawValue
+                    updated.readyAt = newStage == .ready ? ISO8601DateFormatter().string(from: Date())
+                        : newStage == .painted ? nil : updated.readyAt
                     updated.collectedAt = newStage == .collected ? ISO8601DateFormatter().string(from: Date()) : nil
                     if newStage == .ready, let loc = location {
                         var tags = updated.photoTags ?? [:]

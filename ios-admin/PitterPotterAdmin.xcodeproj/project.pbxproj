@@ -7,6 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		054C79EE59524FFA99FB7827 /* AppFonts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 451A4354047942CCBD57C1C5 /* AppFonts.swift */; };
+		0B896C3883DE492DB3124968 /* Montserrat-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3D7D71A0A9F34ED7A70EF014 /* Montserrat-Light.ttf */; };
+		236A96FF /* DocumentationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 392EFF99 /* DocumentationView.swift */; };
+		4EE74FA8 /* FloorPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879322B0 /* FloorPlanView.swift */; };
+		56B6F3661DEB409CB3897C68 /* Montserrat-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1B9D578E4949434298145A4A /* Montserrat-Bold.ttf */; };
+		6A50D01CABE34FB8BCF4AFED /* DMSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 869516693FDD4814BDF84579 /* DMSans-Bold.ttf */; };
+		7CE5818DF08946D1AD2FD4A3 /* DMSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 39C43AF008944907BBC0207B /* DMSans-Medium.ttf */; };
+		9B8B30D511364B1D8EB3E703 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC08BDCDCC6B462397CBDF9D /* StatusBadge.swift */; };
 		A10001 /* PitterPotterAdminApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20001 /* PitterPotterAdminApp.swift */; };
 		A10002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20002 /* Models.swift */; };
 		A10003 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20003 /* APIClient.swift */; };
@@ -37,8 +45,6 @@
 		A10028 /* EmailTemplatesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20029 /* EmailTemplatesView.swift */; };
 		A10029 /* AnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20030 /* AnalyticsView.swift */; };
 		A10030 /* WebmasterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20031 /* WebmasterView.swift */; };
-		4EE74FA8 /* FloorPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879322B0 /* FloorPlanView.swift */; };
-		236A96FF /* DocumentationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 392EFF99 /* DocumentationView.swift */; };
 		A10031 /* AdminSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20032 /* AdminSettingsView.swift */; };
 		A10032 /* CreateGiftCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20033 /* CreateGiftCardView.swift */; };
 		A10033 /* TimeSlotsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20034 /* TimeSlotsView.swift */; };
@@ -46,7 +52,6 @@
 		A10035 /* GhostBookingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20036 /* GhostBookingView.swift */; };
 		A10036 /* CSVExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20037 /* CSVExporter.swift */; };
 		A10037 /* PPBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20038 /* PPBrand.swift */; };
-		A10051 /* PPDateDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20052 /* PPDateDisplay.swift */; };
 		A10038 /* GiftCardScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20039 /* GiftCardScannerView.swift */; };
 		A10039 /* GiftCardRedeemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20040 /* GiftCardRedeemView.swift */; };
 		A10040 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20041 /* SplashScreenView.swift */; };
@@ -57,23 +62,29 @@
 		A10045 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20046 /* NotificationsView.swift */; };
 		A10046 /* NotificationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20047 /* NotificationSettingsView.swift */; };
 		A10050 /* PaintingScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20051 /* PaintingScannerView.swift */; };
-		C7D71A2EA55091BD991D7237 /* ToastManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1883213EE229183A001B1D8A /* ToastManager.swift */; };
-		0B896C3883DE492DB3124968 /* Montserrat-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3D7D71A0A9F34ED7A70EF014 /* Montserrat-Light.ttf */; };
-		C12A48073B3E456E97CB9507 /* Montserrat-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B386D8B53EFE46A8B2E3AFC9 /* Montserrat-Regular.ttf */; };
-		F40E40089474491287882844 /* Montserrat-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 98CAF264E9EE4B1DAB331ABC /* Montserrat-Medium.ttf */; };
-		CCC9F6E1A64A4D22A0CED869 /* Montserrat-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DE1B26CED177436AB6968553 /* Montserrat-SemiBold.ttf */; };
-		56B6F3661DEB409CB3897C68 /* Montserrat-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1B9D578E4949434298145A4A /* Montserrat-Bold.ttf */; };
+		A10051 /* PPDateDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20052 /* PPDateDisplay.swift */; };
 		AFBEE3D2DCAE439FA7FF6A19 /* Montserrat-Black.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7277A6B239114346AE1A0105 /* Montserrat-Black.ttf */; };
+		C12A48073B3E456E97CB9507 /* Montserrat-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B386D8B53EFE46A8B2E3AFC9 /* Montserrat-Regular.ttf */; };
+		C7D71A2EA55091BD991D7237 /* ToastManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1883213EE229183A001B1D8A /* ToastManager.swift */; };
+		CCC9F6E1A64A4D22A0CED869 /* Montserrat-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DE1B26CED177436AB6968553 /* Montserrat-SemiBold.ttf */; };
 		F0FF2F1B3E2647BDB39C9307 /* DMSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 980F79026893466DAB9B34A8 /* DMSans-Regular.ttf */; };
-		7CE5818DF08946D1AD2FD4A3 /* DMSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 39C43AF008944907BBC0207B /* DMSans-Medium.ttf */; };
-		6A50D01CABE34FB8BCF4AFED /* DMSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 869516693FDD4814BDF84579 /* DMSans-Bold.ttf */; };
-		054C79EE59524FFA99FB7827 /* AppFonts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 451A4354047942CCBD57C1C5 /* AppFonts.swift */; };
-		9B8B30D511364B1D8EB3E703 /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC08BDCDCC6B462397CBDF9D /* StatusBadge.swift */; };
+		F40E40089474491287882844 /* Montserrat-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 98CAF264E9EE4B1DAB331ABC /* Montserrat-Medium.ttf */; };
 		FA67B581F27D4BF29E3512A5 /* ImageModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95740503475149A3BEAD655B /* ImageModal.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		1883213EE229183A001B1D8A /* ToastManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ToastManager.swift; sourceTree = "<group>"; };
+		1B9D578E4949434298145A4A /* Montserrat-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "Montserrat-Bold.ttf"; sourceTree = "<group>"; };
+		392EFF99 /* DocumentationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentationView.swift; sourceTree = "<group>"; };
+		39C43AF008944907BBC0207B /* DMSans-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "DMSans-Medium.ttf"; sourceTree = "<group>"; };
+		3D7D71A0A9F34ED7A70EF014 /* Montserrat-Light.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "Montserrat-Light.ttf"; sourceTree = "<group>"; };
+		451A4354047942CCBD57C1C5 /* AppFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFonts.swift; sourceTree = "<group>"; };
+		7277A6B239114346AE1A0105 /* Montserrat-Black.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "Montserrat-Black.ttf"; sourceTree = "<group>"; };
+		869516693FDD4814BDF84579 /* DMSans-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "DMSans-Bold.ttf"; sourceTree = "<group>"; };
+		879322B0 /* FloorPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloorPlanView.swift; sourceTree = "<group>"; };
+		95740503475149A3BEAD655B /* ImageModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageModal.swift; sourceTree = "<group>"; };
+		980F79026893466DAB9B34A8 /* DMSans-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "DMSans-Regular.ttf"; sourceTree = "<group>"; };
+		98CAF264E9EE4B1DAB331ABC /* Montserrat-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "Montserrat-Medium.ttf"; sourceTree = "<group>"; };
 		A20001 /* PitterPotterAdminApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PitterPotterAdminApp.swift; sourceTree = "<group>"; };
 		A20002 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		A20003 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -105,8 +116,6 @@
 		A20029 /* EmailTemplatesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailTemplatesView.swift; sourceTree = "<group>"; };
 		A20030 /* AnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsView.swift; sourceTree = "<group>"; };
 		A20031 /* WebmasterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebmasterView.swift; sourceTree = "<group>"; };
-		879322B0 /* FloorPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloorPlanView.swift; sourceTree = "<group>"; };
-		392EFF99 /* DocumentationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentationView.swift; sourceTree = "<group>"; };
 		A20032 /* AdminSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminSettingsView.swift; sourceTree = "<group>"; };
 		A20033 /* CreateGiftCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGiftCardView.swift; sourceTree = "<group>"; };
 		A20034 /* TimeSlotsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeSlotsView.swift; sourceTree = "<group>"; };
@@ -114,9 +123,7 @@
 		A20036 /* GhostBookingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostBookingView.swift; sourceTree = "<group>"; };
 		A20037 /* CSVExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVExporter.swift; sourceTree = "<group>"; };
 		A20038 /* PPBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPBrand.swift; sourceTree = "<group>"; };
-		A20052 /* PPDateDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDateDisplay.swift; sourceTree = "<group>"; };
 		A20039 /* GiftCardScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardScannerView.swift; sourceTree = "<group>"; };
-		A20051 /* PaintingScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaintingScannerView.swift; sourceTree = "<group>"; };
 		A20040 /* GiftCardRedeemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCardRedeemView.swift; sourceTree = "<group>"; };
 		A20041 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
 		A20042 /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsView.swift; sourceTree = "<group>"; };
@@ -125,19 +132,12 @@
 		A20045 /* NotificationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsViewModel.swift; sourceTree = "<group>"; };
 		A20046 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		A20047 /* NotificationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsView.swift; sourceTree = "<group>"; };
+		A20051 /* PaintingScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaintingScannerView.swift; sourceTree = "<group>"; };
+		A20052 /* PPDateDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDateDisplay.swift; sourceTree = "<group>"; };
 		A30000 /* PitterPotterAdmin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PitterPotterAdmin.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3D7D71A0A9F34ED7A70EF014 /* Montserrat-Light.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = Montserrat-Light.ttf; sourceTree = "<group>"; };
-		B386D8B53EFE46A8B2E3AFC9 /* Montserrat-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = Montserrat-Regular.ttf; sourceTree = "<group>"; };
-		98CAF264E9EE4B1DAB331ABC /* Montserrat-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = Montserrat-Medium.ttf; sourceTree = "<group>"; };
-		DE1B26CED177436AB6968553 /* Montserrat-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = Montserrat-SemiBold.ttf; sourceTree = "<group>"; };
-		1B9D578E4949434298145A4A /* Montserrat-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = Montserrat-Bold.ttf; sourceTree = "<group>"; };
-		7277A6B239114346AE1A0105 /* Montserrat-Black.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = Montserrat-Black.ttf; sourceTree = "<group>"; };
-		980F79026893466DAB9B34A8 /* DMSans-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = DMSans-Regular.ttf; sourceTree = "<group>"; };
-		39C43AF008944907BBC0207B /* DMSans-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = DMSans-Medium.ttf; sourceTree = "<group>"; };
-		869516693FDD4814BDF84579 /* DMSans-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = DMSans-Bold.ttf; sourceTree = "<group>"; };
-		451A4354047942CCBD57C1C5 /* AppFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFonts.swift; sourceTree = "<group>"; };
+		B386D8B53EFE46A8B2E3AFC9 /* Montserrat-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "Montserrat-Regular.ttf"; sourceTree = "<group>"; };
+		DE1B26CED177436AB6968553 /* Montserrat-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "Montserrat-SemiBold.ttf"; sourceTree = "<group>"; };
 		FC08BDCDCC6B462397CBDF9D /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
-		95740503475149A3BEAD655B /* ImageModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageModal.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */

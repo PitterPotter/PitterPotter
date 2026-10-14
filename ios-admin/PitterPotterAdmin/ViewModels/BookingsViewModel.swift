@@ -177,6 +177,7 @@ class BookingsViewModel: ObservableObject {
                     managementToken: booking.managementToken, createdAt: booking.createdAt,
                     photos: booking.photos,
                     collectionStatus: booking.collectionStatus,
+                    readyAt: booking.readyAt,
                     collectedAt: booking.collectedAt,
                     photoTags: booking.photoTags
                 )
@@ -340,6 +341,9 @@ class BookingsViewModel: ObservableObject {
     func updateBookingLocally(_ bookingId: String, collectionStatus: String) {
         if let idx = bookings.firstIndex(where: { $0.id == bookingId }) {
             bookings[idx].collectionStatus = collectionStatus
+            bookings[idx].readyAt = collectionStatus == CollectionStage.ready.rawValue
+                ? ISO8601DateFormatter().string(from: Date())
+                : collectionStatus == CollectionStage.painted.rawValue ? nil : bookings[idx].readyAt
             bookings[idx].collectedAt = collectionStatus == CollectionStage.collected.rawValue
                 ? ISO8601DateFormatter().string(from: Date())
                 : nil
@@ -365,6 +369,7 @@ class BookingsViewModel: ObservableObject {
             managementToken: booking.managementToken, createdAt: booking.createdAt,
             photos: booking.photos,
             collectionStatus: booking.collectionStatus,
+            readyAt: booking.readyAt,
             collectedAt: booking.collectedAt,
             photoTags: booking.photoTags
         )

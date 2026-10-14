@@ -1150,7 +1150,7 @@ actor APIClient {
 
     // MARK: - Collection Status
 
-    func updateCollectionStatus(bookingId: String, studio: String, status: String, staff: Staff, location: String? = nil, collectedAt: String? = nil) async throws {
+    func updateCollectionStatus(bookingId: String, studio: String, status: String, staff: Staff, location: String? = nil, collectedAt: String? = nil, readyAt: String? = nil) async throws {
         var request = URLRequest(url: URL(string: APIConfig.bookingsEndpoint)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1165,6 +1165,7 @@ actor APIClient {
         ]
         if let location { body["location"] = location }
         if let collectedAt { body["collectedAt"] = collectedAt }
+        if let readyAt { body["readyAt"] = readyAt }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await session.data(for: request)

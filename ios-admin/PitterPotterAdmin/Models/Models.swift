@@ -156,6 +156,7 @@ struct Booking: Codable, Identifiable, Hashable {
     var createdAt: String?
     var photos: [String]?
     var collectionStatus: String?
+    var readyAt: String?
     var collectedAt: String?
     var photoTags: [String: [PhotoTag]]?
 
@@ -209,6 +210,7 @@ enum NotificationType: String, Codable {
     case bookingCancelled = "booking_cancelled"
     case bookingStatusChanged = "booking_status_changed"
     case bookingWalkIn = "booking_walk_in"
+    case bookingFailed = "booking_failed"
     case giftCardPurchased = "gift_card_purchased"
     case giftCardRedeemed = "gift_card_redeemed"
     case collectionReady = "collection_ready"
@@ -220,6 +222,7 @@ enum NotificationType: String, Codable {
         case .bookingCancelled: return "calendar.badge.exclamationmark"
         case .bookingStatusChanged: return "checkmark.circle"
         case .bookingWalkIn: return "person.2.fill"
+        case .bookingFailed: return "exclamationmark.triangle.fill"
         case .giftCardPurchased: return "giftcard.fill"
         case .giftCardRedeemed: return "giftcard"
         case .collectionReady: return "camera.circle.fill"
@@ -233,6 +236,7 @@ enum NotificationType: String, Codable {
         case .bookingCancelled: return "red"
         case .bookingStatusChanged: return "blue"
         case .bookingWalkIn: return "indigo"
+        case .bookingFailed: return "red"
         case .giftCardPurchased: return "purple"
         case .giftCardRedeemed: return "orange"
         case .collectionReady: return "teal"
@@ -300,6 +304,7 @@ extension NotificationType {
         case .bookingCancelled: return "Booking Cancelled"
         case .bookingStatusChanged: return "Booking Status Changed"
         case .bookingWalkIn: return "Walk-in Booking"
+        case .bookingFailed: return "Booking Failed (Paid)"
         case .giftCardPurchased: return "Gift Card Purchased"
         case .giftCardRedeemed: return "Gift Card Redeemed"
         case .collectionReady: return "Collection Ready"

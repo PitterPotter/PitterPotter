@@ -965,6 +965,7 @@ struct EditBookingView: View {
                                 managementToken: editingBooking.managementToken, createdAt: editingBooking.createdAt,
                                 photos: editingBooking.photos,
                                 collectionStatus: editingBooking.collectionStatus,
+                                readyAt: editingBooking.readyAt,
                                 collectedAt: editingBooking.collectedAt,
                                 photoTags: editingBooking.photoTags
                             )

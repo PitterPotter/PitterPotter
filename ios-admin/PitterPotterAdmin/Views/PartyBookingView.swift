@@ -257,6 +257,7 @@ struct PartyBookingView: View {
             createdAt: ISO8601DateFormatter().string(from: Date()),
             photos: nil,
             collectionStatus: nil,
+            readyAt: nil,
             collectedAt: nil,
             photoTags: nil
         )

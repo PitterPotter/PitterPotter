@@ -213,6 +213,7 @@ struct NewWalkInView: View {
             createdAt: nil,
             photos: nil,
             collectionStatus: nil,
+            readyAt: nil,
             collectedAt: nil,
             photoTags: nil
         )

@@ -1947,6 +1947,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     const updatedBooking: BookingInquiry = {
       ...booking,
       collectionStatus: stage,
+      readyAt: stage === 'ready' ? new Date().toISOString()
+        : stage === 'painted' ? undefined : booking.readyAt,
       collectedAt: stage === 'collected' ? new Date().toISOString() : undefined,
     };
     setInquiries(prev => prev.map(i => i.id === updatedBooking.id ? updatedBooking : i));

@@ -70,6 +70,7 @@ export interface GiftCard {
   code: string;
   amount: number;
   balance: number;
+  covers?: string;
   recipientName: string;
   recipientEmail: string;
   senderName: string;
@@ -113,6 +114,7 @@ export interface GiftCardApiRow {
   code: string;
   amount: number;
   balance: number;
+  covers?: string;
   recipient_name?: string;
   recipient_email?: string;
   sender_name?: string;

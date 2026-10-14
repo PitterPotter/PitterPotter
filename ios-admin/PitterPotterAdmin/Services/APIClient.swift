@@ -1034,7 +1034,7 @@ actor APIClient {
 
     // MARK: - Gift Card Creation
 
-    func createGiftCard(amount: Double, recipientName: String, recipientEmail: String, senderName: String, message: String, staff: Staff, isPhysical: Bool = false) async throws -> GiftCard {
+    func createGiftCard(amount: Double, covers: String = "", recipientName: String, recipientEmail: String, senderName: String, message: String, staff: Staff, isPhysical: Bool = false) async throws -> GiftCard {
         var request = URLRequest(url: URL(string: APIConfig.giftCardsEndpoint)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1050,6 +1050,9 @@ actor APIClient {
             "senderName": senderName,
             "message": message,
         ]
+        if !covers.isEmpty {
+            body["covers"] = covers
+        }
         if isPhysical {
             body["isPhysical"] = true
         }
@@ -1533,18 +1536,21 @@ struct GiftCard: Codable, Identifiable {
     var amount: Double
     var balance: Double?
     var status: String
+    var covers: String?
     var recipientName: String?
     var recipientEmail: String?
     var recipientPhone: String?
     var createdAt: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, code, amount, balance, status
+        case id, code, amount, balance, status, covers
         case recipientName = "recipient_name"
         case recipientEmail = "recipient_email"
         case recipientPhone = "recipient_phone"
         case createdAt = "created_at"
     }
+
+    var isActivityVoucher: Bool { !(covers ?? "").isEmpty }
 
     var statusLabel: String {
         status.capitalized
@@ -1571,12 +1577,15 @@ struct GiftCardBalanceResult: Codable {
     let amount: Double
     let balance: Double
     let status: String
+    let covers: String?
     let recipientName: String?
     let recipientEmail: String?
     let expiryDate: String?
 
+    var isActivityVoucher: Bool { !(covers ?? "").isEmpty }
+
     enum CodingKeys: String, CodingKey {
-        case id, code, amount, balance, status
+        case id, code, amount, balance, status, covers
         case recipientName = "recipient_name"
         case recipientEmail = "recipient_email"
         case expiryDate = "expiry_date"

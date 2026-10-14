@@ -30,7 +30,17 @@ interface GiftCardRow {
   purchase_date: string;
   expiry_date: string;
   status: string;
+  covers?: string | null;
 }
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Activity vouchers (covers set) display what they cover instead of a £ amount
+const cardValueHtml = (gc: GiftCardRow) =>
+  gc.covers ? escapeHtml(gc.covers) : `&pound;${Number(gc.amount).toFixed(2)}`;
+const cardValuePlain = (gc: GiftCardRow) =>
+  gc.covers ? gc.covers : `£${Number(gc.amount).toFixed(2)}`;
 
 // pdf-lib's WinAnsi fonts can't encode control chars (\n, \t) or non-Latin1 chars (emoji).
 function sanitizePdfText(s: string | null | undefined, fallback = ''): string {
@@ -114,7 +124,19 @@ async function generateVoucherPDF(giftCard: GiftCardRow): Promise<Uint8Array> {
     color: rgb(0.106, 0.176, 0.235),
   });
 
-  // Amount — large and centered
+  // Amount — large and centered. Activity vouchers show the covers text.
+  if (giftCard.covers) {
+    const coversText = (giftCard.covers || 'Studio activity').replace(/[^\x00-\xFF]/g, ' ').trim();
+    const size = fontBold.widthOfTextAtSize(coversText, 16) > width - 160 ? 12 : 16;
+    const coversWidth = fontBold.widthOfTextAtSize(coversText, size);
+    page.drawText(coversText, {
+      x: (width - coversWidth) / 2,
+      y: height - 160,
+      size,
+      font: fontBold,
+      color: rgb(0.106, 0.176, 0.235),
+    });
+  } else {
   const amountStr = `\u00A3${Number(giftCard.amount).toFixed(2)}`;
   const amountWidth = fontBold.widthOfTextAtSize(amountStr, 36);
   page.drawText(amountStr, {
@@ -124,6 +146,7 @@ async function generateVoucherPDF(giftCard: GiftCardRow): Promise<Uint8Array> {
     font: fontBold,
     color: rgb(0.106, 0.176, 0.235),
   });
+  }
 
   // Gift card code box
   const codeY = height - 200;
@@ -320,8 +343,8 @@ function buildRecipientEmail(giftCard: GiftCardRow): string {
       <p style="font-size:15px;line-height:1.6;color:#1B2D3C;margin:0 0 24px;"><strong>${senderName}</strong> has sent you a Pitter Potter gift card. You can use it towards any pottery painting session at either of our studios in Putney or Wimbledon.</p>
 
       <div style="background:#DBE7E4;border-radius:12px;padding:24px;margin:0 0 24px;text-align:center;">
-        <p style="font-size:12px;color:#1B2D3C;opacity:0.6;margin:0 0 4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Gift Card Value</p>
-        <p style="font-size:32px;font-weight:900;color:#1B2D3C;margin:0 0 12px;">&pound;${Number(giftCard.amount).toFixed(2)}</p>
+        <p style="font-size:12px;color:#1B2D3C;opacity:0.6;margin:0 0 4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">${giftCard.covers ? 'This voucher covers' : 'Gift Card Value'}</p>
+        <p style="font-size:${giftCard.covers ? '18px' : '32px'};font-weight:900;color:#1B2D3C;margin:0 0 12px;">${cardValueHtml(giftCard)}</p>
         <p style="font-size:12px;color:#1B2D3C;opacity:0.6;margin:0 0 4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Code</p>
         <p style="font-size:20px;font-weight:900;color:#1B2D3C;margin:0;font-family:monospace;letter-spacing:2px;">${giftCard.code}</p>
       </div>
@@ -370,7 +393,7 @@ function buildSenderEmail(giftCard: GiftCardRow): string {
 
       <div style="background:#DBE7E4;border-radius:12px;padding:24px;margin:0 0 24px;">
         <p style="font-size:14px;line-height:1.8;margin:0;color:#1B2D3C;">
-          <strong style="display:inline-block;width:100px;color:#1B2D3C;opacity:0.6;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Value</strong> &pound;${Number(giftCard.amount).toFixed(2)}<br/>
+          <strong style="display:inline-block;width:100px;color:#1B2D3C;opacity:0.6;font-size:12px;text-transform:uppercase;letter-spacing:1px;">${giftCard.covers ? 'Covers' : 'Value'}</strong> ${cardValueHtml(giftCard)}<br/>
           <strong style="display:inline-block;width:100px;color:#1B2D3C;opacity:0.6;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Code</strong> <span style="font-family:monospace;font-weight:900;letter-spacing:1px;">${giftCard.code}</span><br/>
           <strong style="display:inline-block;width:100px;color:#1B2D3C;opacity:0.6;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Recipient</strong> ${giftCard.recipient_name}<br/>
           <strong style="display:inline-block;width:100px;color:#1B2D3C;opacity:0.6;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Valid until</strong> 12 months from purchase
@@ -439,6 +462,11 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Subject-line wording for activity vouchers vs £ gift cards
+    const subjectCardLabel = giftCard.covers
+      ? 'a Pitter Potter gift voucher'
+      : `a £${Number(giftCard.amount).toFixed(2)} gift card`;
+
     // Generate PDF voucher
     const pdfBytes = await generateVoucherPDF(giftCard);
     const pdfUint8 = new Uint8Array(pdfBytes);
@@ -464,7 +492,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             from: `Pitter Potter <${fromEmail}>`,
             to: giftCard.recipient_email,
-            subject: `You've received a \u00A3${Number(giftCard.amount).toFixed(2)} gift card from ${giftCard.sender_name || 'someone'}!`,
+            subject: `You've received ${subjectCardLabel} from ${giftCard.sender_name || 'someone'}!`,
             html: buildRecipientEmail(giftCard),
             attachments: [{
               filename: `pitter-potter-gift-voucher-${giftCard.code}.pdf`,
@@ -481,7 +509,7 @@ Deno.serve(async (req) => {
             await supabase.from('email_logs').insert({
               email_type: 'gift_card_recipient',
               recipient: giftCard.recipient_email,
-              subject: `You've received a \u00A3${Number(giftCard.amount).toFixed(2)} gift card from ${giftCard.sender_name || 'someone'}!`,
+              subject: `You've received ${subjectCardLabel} from ${giftCard.sender_name || 'someone'}!`,
               body: buildRecipientEmail(giftCard),
               resend_id: resendData.id || null,
               status: 'sent',
@@ -510,7 +538,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             from: `Pitter Potter <${fromEmail}>`,
             to: giftCard.sender_email,
-            subject: `Gift card purchase confirmed \u2014 \u00A3${Number(giftCard.amount).toFixed(2)}`,
+            subject: `Gift card purchase confirmed \u2014 ${cardValuePlain(giftCard)}`,
             html: buildSenderEmail(giftCard),
             attachments: [{
               filename: `pitter-potter-gift-voucher-${giftCard.code}.pdf`,
@@ -526,7 +554,7 @@ Deno.serve(async (req) => {
             await supabase.from('email_logs').insert({
               email_type: 'gift_card_sender',
               recipient: giftCard.sender_email,
-              subject: `Gift card purchase confirmed \u2014 \u00A3${Number(giftCard.amount).toFixed(2)}`,
+              subject: `Gift card purchase confirmed \u2014 ${cardValuePlain(giftCard)}`,
               body: buildSenderEmail(giftCard),
               resend_id: resendData.id || null,
               status: 'sent',

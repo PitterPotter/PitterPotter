@@ -40,6 +40,7 @@ interface GiftCardRow {
   purchase_date: string | null;
   expiry_date: string | null;
   status: string;
+  covers?: string | null;
 }
 
 async function generateVoucherPDF(giftCard: GiftCardRow): Promise<Uint8Array> {
@@ -114,6 +115,12 @@ async function generateVoucherPDF(giftCard: GiftCardRow): Promise<Uint8Array> {
   // Decorative line
   page.drawRectangle({ x: 80, y: height - 82, width: width - 160, height: 1, color: sageDeep });
 
+  const sanitize = (s: string | null | undefined, fallback: string) => {
+    if (!s) return fallback;
+    // WinAnsi can't encode control chars (\n, \t) or non-Latin1 chars — strip both
+    return s.replace(/[^\x00-\xFF]/g, '').replace(/[\x00-\x1F\x7F-\x9F]+/g, ' ').trim() || fallback;
+  };
+
   // GIFT VOUCHER title
   const voucherText = 'GIFT VOUCHER';
   const voucherW = fontBold.widthOfTextAtSize(voucherText, 18);
@@ -121,7 +128,50 @@ async function generateVoucherPDF(giftCard: GiftCardRow): Promise<Uint8Array> {
     x: (width - voucherW) / 2, y: height - 108, size: 18, font: fontBold, color: charcoal,
   });
 
-  // Amount — on a sage panel
+  // Amount — on a sage panel. Activity vouchers (e.g. school donations)
+  // show what the voucher covers instead of a £ amount.
+  if (giftCard.covers) {
+    const coversText = sanitize(giftCard.covers, 'Studio activity');
+    const coversMaxWidth = width - 200;
+    // Word-wrap the covers text, shrinking font until it fits in 2 lines
+    let coversSize = 16;
+    let coversLines: string[] = [];
+    const wrapCovers = (size: number): string[] => {
+      const lines: string[] = [];
+      let line = '';
+      for (const word of coversText.split(/\s+/)) {
+        const test = line ? `${line} ${word}` : word;
+        if (fontBold.widthOfTextAtSize(test, size) > coversMaxWidth) {
+          if (line) lines.push(line);
+          line = word;
+        } else {
+          line = test;
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    };
+    while (coversSize > 9) {
+      coversLines = wrapCovers(coversSize);
+      if (coversLines.length <= 2) break;
+      coversSize -= 1;
+    }
+    const coversLineH = coversSize + 6;
+    const coversPanelH = coversLines.length * coversLineH + 14;
+    page.drawRectangle({
+      x: 80, y: height - 132 - coversPanelH,
+      width: width - 160, height: coversPanelH,
+      color: sage, borderColor: sageDeep, borderWidth: 1,
+    });
+    coversLines.forEach((coversLine, i) => {
+      const lw = fontBold.widthOfTextAtSize(coversLine, coversSize);
+      page.drawText(coversLine, {
+        x: (width - lw) / 2,
+        y: height - 132 - coversPanelH + 10 + (coversLines.length - 1 - i) * coversLineH,
+        size: coversSize, font: fontBold, color: charcoal,
+      });
+    });
+  } else {
   const amountStr = `\u00A3${Number(giftCard.amount).toFixed(2)}`;
   const amountWidth = fontBold.widthOfTextAtSize(amountStr, 36);
   const amountPanelW = amountWidth + 60;
@@ -133,6 +183,7 @@ async function generateVoucherPDF(giftCard: GiftCardRow): Promise<Uint8Array> {
   page.drawText(amountStr, {
     x: (width - amountWidth) / 2, y: height - 158, size: 36, font: fontBold, color: charcoal,
   });
+  }
 
   // Code box — charcoal background
   const codeY = height - 200;
@@ -149,11 +200,6 @@ async function generateVoucherPDF(giftCard: GiftCardRow): Promise<Uint8Array> {
   let y = height - 240;
   const labelX = 80;
   const valueX = 160;
-  const sanitize = (s: string | null, fallback: string) => {
-    if (!s) return fallback;
-    // WinAnsi can't encode control chars (\n, \t) or non-Latin1 chars — strip both
-    return s.replace(/[^\x00-\xFF]/g, '').replace(/[\x00-\x1F\x7F-\x9F]+/g, ' ').trim() || fallback;
-  };
 
   page.drawText('From:', { x: labelX, y, size: 10, font: fontRegular, color: grey });
   page.drawText(sanitize(giftCard.sender_name, 'Anonymous'), { x: valueX, y, size: 11, font: fontBold, color: charcoal });
@@ -309,13 +355,17 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      const { amount, recipientName, recipientEmail, senderName, message, isPhysical } = body;
-      if (!isNumber(amount) || amount <= 0) {
+      const { amount, recipientName, recipientEmail, senderName, message, isPhysical, covers } = body;
+      const coversText = typeof covers === 'string' ? covers.trim() : '';
+      if (coversText) {
+        // Activity voucher — no £ amount required
+      } else if (!isNumber(amount) || amount <= 0) {
         return new Response(JSON.stringify({ error: 'Invalid amount' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      const cardAmount = coversText ? 0 : amount;
 
       const code = generateCode();
       const purchaseDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -324,8 +374,9 @@ Deno.serve(async (req) => {
 
       const { data: giftCard, error: insertError } = await supabase.from('gift_cards').insert({
         code,
-        amount,
-        balance: amount,
+        amount: cardAmount,
+        balance: cardAmount,
+        covers: coversText || null,
         recipient_name: recipientName || '',
         recipient_email: recipientEmail || '',
         sender_name: senderName || 'In-store',
@@ -339,13 +390,15 @@ Deno.serve(async (req) => {
 
       if (insertError) throw insertError;
 
-      await logAudit(supabase, staff, 'create', 'gift_card', giftCard.id, { code, amount, isPhysical: !!isPhysical });
+      await logAudit(supabase, staff, 'create', 'gift_card', giftCard.id, { code, amount: cardAmount, covers: coversText || undefined, isPhysical: !!isPhysical });
 
       // Create admin notification for gift card creation
       await createNotification(supabase, {
         type: 'gift_card_purchased',
-        title: 'Gift Card Created',
-        message: `£${amount} gift card ${code} created by ${staff.name}${isPhysical ? ' (physical)' : ''}`,
+        title: coversText ? 'Activity Voucher Created' : 'Gift Card Created',
+        message: coversText
+          ? `Activity voucher ${code} (${coversText}) created by ${staff.name}`
+          : `£${cardAmount} gift card ${code} created by ${staff.name}${isPhysical ? ' (physical)' : ''}`,
         entityType: 'gift_card',
         entityId: giftCard.id,
       });
@@ -368,6 +421,7 @@ Deno.serve(async (req) => {
         code: giftCard.code,
         amount: Number(giftCard.amount),
         balance: Number(giftCard.balance),
+        covers: giftCard.covers || '',
         status: giftCard.status,
         recipient_name: giftCard.recipient_name,
         recipient_email: giftCard.recipient_email,
@@ -413,6 +467,7 @@ Deno.serve(async (req) => {
         code: card.code,
         amount: Number(card.amount),
         balance: Number(card.balance),
+        covers: card.covers || '',
         status: card.status,
         recipient_name: card.recipient_name,
         recipient_email: card.recipient_email,
@@ -426,12 +481,6 @@ Deno.serve(async (req) => {
       const { code, amount: redeemAmount } = body;
       if (!isNonEmptyString(code)) {
         return new Response(JSON.stringify({ error: 'Missing code' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      if (!isNumber(redeemAmount) || redeemAmount <= 0) {
-        return new Response(JSON.stringify({ error: 'Invalid amount' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -461,6 +510,42 @@ Deno.serve(async (req) => {
       if (expiryDate && expiryDate < new Date()) {
         await supabase.from('gift_cards').update({ status: 'expired' }).eq('id', card.id);
         return new Response(JSON.stringify({ error: 'Gift card has expired' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Activity vouchers (covers set) are single-use — redeeming marks them
+      // used with no £ deduction.
+      if (card.covers) {
+        const { error: useError } = await supabase.from('gift_cards').update({
+          status: 'redeemed',
+        }).eq('id', card.id);
+        if (useError) throw useError;
+        await logAudit(supabase, staff, 'redeem', 'gift_card', card.id, {
+          code: card.code,
+          covers: card.covers,
+        });
+        await createNotification(supabase, {
+          type: 'gift_card_redeemed',
+          title: 'Activity Voucher Redeemed',
+          message: `${card.code} (${card.covers}) marked as used by ${staff.name}`,
+          entityType: 'gift_card',
+          entityId: card.id,
+        });
+        return new Response(JSON.stringify({
+          success: true,
+          code: card.code,
+          discount: 0,
+          balance: 0,
+          status: 'redeemed',
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!isNumber(redeemAmount) || redeemAmount <= 0) {
+        return new Response(JSON.stringify({ error: 'Invalid amount' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

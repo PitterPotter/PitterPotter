@@ -5,7 +5,9 @@ struct CreateGiftCardView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @Environment(\.dismiss) var dismiss
 
+    @State private var voucherKind = 0 // 0 = £ amount, 1 = activity voucher
     @State private var amount = "50"
+    @State private var covers = "One studio fee + one small animal to paint"
     @State private var recipientName = ""
     @State private var recipientEmail = ""
     @State private var senderName = ""
@@ -17,19 +19,37 @@ struct CreateGiftCardView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Amount").font(AppFont.body(13, weight: .bold)).foregroundStyle(PPBrand.charcoal)) {
-                    HStack {
-                        Text("£")
-                            .font(AppFont.heading(20))
-                            .foregroundStyle(PPBrand.charcoal)
-                        TextField("Amount", text: $amount)
-                            .keyboardType(.decimalPad)
-                            .font(AppFont.heading(20))
-                            .foregroundStyle(PPBrand.charcoal)
+                Section {
+                    Picker("Voucher Type", selection: $voucherKind) {
+                        Text("£ Amount").tag(0)
+                        Text("Activity Voucher").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if voucherKind == 0 {
+                    Section(header: Text("Amount").font(AppFont.body(13, weight: .bold)).foregroundStyle(PPBrand.charcoal)) {
+                        HStack {
+                            Text("£")
+                                .font(AppFont.heading(20))
+                                .foregroundStyle(PPBrand.charcoal)
+                            TextField("Amount", text: $amount)
+                                .keyboardType(.decimalPad)
+                                .font(AppFont.heading(20))
+                                .foregroundStyle(PPBrand.charcoal)
+                        }
+                    }
+                } else {
+                    Section(header: Text("Voucher Covers").font(AppFont.body(13, weight: .bold)).foregroundStyle(PPBrand.charcoal)) {
+                        TextField("e.g. One studio fee + one small animal to paint", text: $covers, axis: .vertical)
+                            .lineLimit(2...4)
+                        Text("Shown on the voucher instead of a £ amount — e.g. school donation vouchers. Put the school name in Recipient.")
+                            .font(AppFont.body(11, weight: .medium))
+                            .foregroundStyle(PPBrand.clay300)
                     }
                 }
 
-                Section(header: Text("Recipient").font(AppFont.body(13, weight: .bold)).foregroundStyle(PPBrand.charcoal)) {
+                Section(header: Text(voucherKind == 1 ? "Recipient (e.g. school name)" : "Recipient").font(AppFont.body(13, weight: .bold)).foregroundStyle(PPBrand.charcoal)) {
                     TextField("Name", text: $recipientName)
                     TextField("Email", text: $recipientEmail)
                         .keyboardType(.emailAddress)
@@ -65,7 +85,7 @@ struct CreateGiftCardView: View {
                         .frame(maxWidth: .infinity)
                         .foregroundColor(PPBrand.charcoal)
                     }
-                    .disabled(isCreating || amount.isEmpty)
+                    .disabled(isCreating || (voucherKind == 0 ? amount.isEmpty : covers.trimmingCharacters(in: .whitespaces).isEmpty))
                 }
 
                 if let card = createdCard {
@@ -87,9 +107,10 @@ struct CreateGiftCardView: View {
                                 .fontWeight(.bold)
                                 .foregroundStyle(PPBrand.charcoal)
 
-                            Text("£\(String(format: "%.2f", card.amount))")
-                                .font(AppFont.heading(28))
+                            Text(card.isActivityVoucher ? (card.covers ?? "") : "£\(String(format: "%.2f", card.amount))")
+                                .font(AppFont.heading(card.isActivityVoucher ? 17 : 28))
                                 .foregroundStyle(PPBrand.charcoal)
+                                .multilineTextAlignment(.center)
 
                             if isPhysical {
                                 Text("Print this QR code for the physical card")
@@ -135,13 +156,16 @@ struct CreateGiftCardView: View {
     }
 
     private func createGiftCard() {
+        let isActivity = voucherKind == 1
+        let amountValue = Double(amount) ?? 0
         guard let staff = authVM.staff,
-              let amountValue = Double(amount) else { return }
+              isActivity ? !covers.trimmingCharacters(in: .whitespaces).isEmpty : amountValue > 0 else { return }
         isCreating = true
         Task {
             do {
                 let card = try await APIClient.shared.createGiftCard(
-                    amount: amountValue,
+                    amount: isActivity ? 0 : amountValue,
+                    covers: isActivity ? covers.trimmingCharacters(in: .whitespaces) : "",
                     recipientName: recipientName,
                     recipientEmail: isPhysical ? "" : recipientEmail,
                     senderName: senderName,
@@ -175,7 +199,7 @@ struct CreateGiftCardView: View {
     }
 
     private func shareQRCode(card: GiftCard) {
-        var items: [Any] = ["Gift Card: \(card.code) - £\(String(format: "%.2f", card.amount))"]
+        var items: [Any] = ["Gift Card: \(card.code) - \(card.isActivityVoucher ? (card.covers ?? "") : "£\(String(format: "%.2f", card.amount))")"]
         if let qrImage = generateQRCode(from: card.code) {
             items.append(qrImage)
         }

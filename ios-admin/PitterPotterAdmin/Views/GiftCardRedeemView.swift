@@ -47,16 +47,38 @@ struct GiftCardRedeemView: View {
                 if let result = balanceResult {
                     Section(header: Text("Card Details")) {
                         LabeledContent("Code", value: result.code)
-                        LabeledContent("Original Amount", value: "£\(String(format: "%.2f", result.amount))")
-                        LabeledContent("Balance", value: "£\(String(format: "%.2f", result.balance))")
-                            .fontWeight(.bold)
+                        if result.isActivityVoucher {
+                            LabeledContent("Covers", value: result.covers ?? "")
+                        } else {
+                            LabeledContent("Original Amount", value: "£\(String(format: "%.2f", result.amount))")
+                            LabeledContent("Balance", value: "£\(String(format: "%.2f", result.balance))")
+                                .fontWeight(.bold)
+                        }
                         LabeledContent("Status", value: result.status.capitalized)
                         if let name = result.recipientName, !name.isEmpty {
                             LabeledContent("Recipient", value: name)
                         }
                     }
 
-                    if result.status == "active" && result.balance > 0 {
+                    if result.status == "active" && result.isActivityVoucher {
+                        Section {
+                            Button {
+                                markUsed()
+                            } label: {
+                                HStack {
+                                    if isRedeeming { ProgressView() }
+                                    Text(isRedeeming ? "Marking..." : "Mark as Used")
+                                        .fontWeight(.bold)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.purple)
+                            .disabled(isRedeeming)
+                        }
+                    }
+
+                    if result.status == "active" && !result.isActivityVoucher && result.balance > 0 {
                         Section(header: Text("Redeem")) {
                             HStack {
                                 Text("£")
@@ -93,9 +115,14 @@ struct GiftCardRedeemView: View {
 
                 if let result = redeemResult {
                     Section(header: Text("Result")) {
-                        LabeledContent("Discount Applied", value: "£\(String(format: "%.2f", result.discount))")
-                            .fontWeight(.bold)
-                        LabeledContent("Remaining Balance", value: "£\(String(format: "%.2f", result.balance))")
+                        if balanceResult?.isActivityVoucher == true {
+                            Text("Activity voucher marked as used")
+                                .font(AppFont.body(13, weight: .semibold))
+                        } else {
+                            LabeledContent("Discount Applied", value: "£\(String(format: "%.2f", result.discount))")
+                                .fontWeight(.bold)
+                            LabeledContent("Remaining Balance", value: "£\(String(format: "%.2f", result.balance))")
+                        }
                         LabeledContent("Status", value: result.status.capitalized)
                     }
                 }
@@ -183,7 +210,7 @@ struct GiftCardRedeemView: View {
                     if let idx = balanceResult {
                         balanceResult = GiftCardBalanceResult(
                             id: idx.id, code: idx.code, amount: idx.amount,
-                            balance: result.balance, status: result.status,
+                            balance: result.balance, status: result.status, covers: idx.covers,
                             recipientName: idx.recipientName, recipientEmail: idx.recipientEmail,
                             expiryDate: idx.expiryDate
                         )
@@ -204,6 +231,11 @@ struct GiftCardRedeemView: View {
                 }
             }
         }
+    }
+
+    private func markUsed() {
+        redeemAmount = "0"
+        redeem()
     }
 
     private func redeemFullBalance() {

@@ -122,13 +122,15 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     recipientEmail: '',
     senderName: '',
     message: '',
+    covers: '',
   });
+  const [giftCardKind, setGiftCardKind] = useState<'amount' | 'activity'>('amount');
   const [giftCardCreating, setGiftCardCreating] = useState(false);
   const [giftCardIsPhysical, setGiftCardIsPhysical] = useState(false);
   const [showRedeemModal, setShowRedeemModal] = useState(false);
   const [redeemCode, setRedeemCode] = useState('');
   const [redeemAmount, setRedeemAmount] = useState('');
-  const [redeemBalanceResult, setRedeemBalanceResult] = useState<{ code: string; amount: number; balance: number; status: string; recipient_name?: string } | null>(null);
+  const [redeemBalanceResult, setRedeemBalanceResult] = useState<{ code: string; amount: number; balance: number; status: string; recipient_name?: string; covers?: string } | null>(null);
   const [redeemChecking, setRedeemChecking] = useState(false);
   const [redeeming, setRedeeming] = useState(false);
   const [redeemResult, setRedeemResult] = useState<{ discount: number; balance: number; status: string } | null>(null);
@@ -1077,6 +1079,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             code: row.code,
             amount: Number(row.amount),
             balance: Number(row.balance),
+            covers: row.covers || undefined,
             recipientName: row.recipient_name || '',
             recipientEmail: row.recipient_email || '',
             senderName: row.sender_name || '',
@@ -1307,7 +1310,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
   const redeemGiftCard = async () => {
     const amount = parseFloat(redeemAmount);
-    if (!redeemCode.trim() || !amount || amount <= 0) return;
+    const isActivityVoucher = !!redeemBalanceResult?.covers;
+    if (!redeemCode.trim() || (!isActivityVoucher && (!amount || amount <= 0))) return;
     setRedeeming(true);
     setRedeemError('');
     try {
@@ -1322,7 +1326,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       if (redeemBalanceResult) {
         setRedeemBalanceResult({ ...redeemBalanceResult, balance: data.balance, status: data.status });
       }
-      showToast(`Redeemed £${data.discount.toFixed(2)} from gift card`, 'success');
+      showToast(isActivityVoucher ? 'Activity voucher marked as used' : `Redeemed £${data.discount.toFixed(2)} from gift card`, 'success');
       loadGiftCards();
     } catch (err) {
       setRedeemError(err instanceof Error ? err.message : 'Failed to redeem gift card');
@@ -1332,7 +1336,12 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   };
 
   const createGiftCardInStore = async () => {
-    if (!newGiftCard.amount || newGiftCard.amount <= 0) {
+    const isActivity = giftCardKind === 'activity';
+    if (isActivity && !newGiftCard.covers.trim()) {
+      showToast('Please enter what the voucher covers', 'error');
+      return;
+    }
+    if (!isActivity && (!newGiftCard.amount || newGiftCard.amount <= 0)) {
       showToast('Please enter a valid amount', 'error');
       return;
     }
@@ -1345,19 +1354,21 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           action: 'create',
           username: staff.username,
           sessionToken: staff.sessionToken,
-          amount: newGiftCard.amount,
+          amount: isActivity ? 0 : newGiftCard.amount,
+          covers: isActivity ? newGiftCard.covers.trim() : '',
           recipientName: newGiftCard.recipientName,
           recipientEmail: giftCardIsPhysical ? '' : newGiftCard.recipientEmail,
           senderName: newGiftCard.senderName || 'In-store',
           message: newGiftCard.message,
-          isPhysical: giftCardIsPhysical,
+          isPhysical: giftCardIsPhysical || isActivity && !newGiftCard.recipientEmail,
         }),
       });
       const data = await response.json();
       if (!response.ok || data.error) throw new Error(data.error || 'Failed to create gift card');
-      showToast(`Gift card ${data.code} created${giftCardIsPhysical ? ' (physical)' : ''}`, 'success');
+      showToast(`${isActivity ? 'Activity voucher' : 'Gift card'} ${data.code} created${giftCardIsPhysical ? ' (physical)' : ''}`, 'success');
       setShowGiftCardModal(false);
-      setNewGiftCard({ amount: 50, recipientName: '', recipientEmail: '', senderName: '', message: '' });
+      setNewGiftCard({ amount: 50, recipientName: '', recipientEmail: '', senderName: '', message: '', covers: '' });
+      setGiftCardKind('amount');
       setGiftCardIsPhysical(false);
       loadGiftCards();
     } catch (err) {
@@ -3000,8 +3011,12 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   {filteredGiftCards.map((card) => (
                     <tr key={card.id} className="border-b border-[#1B2D3C]/5">
                       <td className="py-2 font-mono">{card.code}</td>
-                      <td className="py-2">£{card.amount.toFixed(2)}</td>
-                      <td className="py-2">£{card.balance.toFixed(2)}</td>
+                      <td className="py-2">
+                        {card.covers
+                          ? <span className="inline-block max-w-[160px] truncate text-purple-700" title={card.covers}>{card.covers}</span>
+                          : `£${card.amount.toFixed(2)}`}
+                      </td>
+                      <td className="py-2">{card.covers ? '—' : `£${card.balance.toFixed(2)}`}</td>
                       <td className="py-2">{card.recipientName}</td>
                       <td className="py-2">{card.senderName}</td>
                       <td className="py-2">
@@ -3024,7 +3039,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                           >
                             Copy
                           </button>
-                          {card.status === 'active' && card.balance > 0 && (
+                          {card.status === 'active' && (card.balance > 0 || !!card.covers) && (
                             <button
                               onClick={() => openRedeemModal(card.code)}
                               className="px-2 py-1 bg-[#1B2D3C] text-white text-[10px] font-bold uppercase tracking-wider rounded hover:bg-[#243B53] cursor-pointer"
@@ -4763,6 +4778,38 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           <div className="bg-white p-6 border border-[#1B2D3C]/20 max-w-md w-full space-y-4 shadow-lg max-h-[90vh] overflow-y-auto sm:rounded-xl">
             <h3 className="font-heading text-xl font-black text-[#1B2D3C]">Create Gift Card</h3>
             <div className="space-y-3">
+              <div className="flex rounded-lg border border-[#1B2D3C]/15 overflow-hidden">
+                {(['amount', 'activity'] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => {
+                      setGiftCardKind(k);
+                      if (k === 'activity' && !newGiftCard.covers) {
+                        setNewGiftCard({ ...newGiftCard, covers: 'One studio fee + one small animal to paint' });
+                      }
+                    }}
+                    className={`flex-1 px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      giftCardKind === k ? 'bg-[#DBE7E4] text-[#1B2D3C]' : 'bg-white text-[#1B2D3C]/50 hover:text-[#1B2D3C]'
+                    }`}
+                  >
+                    {k === 'amount' ? '£ Amount' : 'Activity Voucher'}
+                  </button>
+                ))}
+              </div>
+              {giftCardKind === 'activity' ? (
+                <div>
+                  <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Voucher Covers *</label>
+                  <input
+                    type="text"
+                    value={newGiftCard.covers}
+                    onChange={(e) => setNewGiftCard({ ...newGiftCard, covers: e.target.value })}
+                    placeholder="e.g. One studio fee + one small animal to paint"
+                    className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20"
+                  />
+                  <p className="text-[10px] text-[#1B2D3C]/50 mt-1">Shown on the voucher instead of a £ amount — e.g. school donation vouchers. Put the school name in Recipient Name.</p>
+                </div>
+              ) : (
               <div>
                 <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Amount (£) *</label>
                 <input
@@ -4774,8 +4821,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20"
                 />
               </div>
+              )}
               <div>
-                <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Recipient Name</label>
+                <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Recipient Name{giftCardKind === 'activity' && ' (e.g. school name)'}</label>
                 <input
                   type="text"
                   value={newGiftCard.recipientName}
@@ -4823,17 +4871,17 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => { setShowGiftCardModal(false); setGiftCardIsPhysical(false); }}
+                onClick={() => { setShowGiftCardModal(false); setGiftCardIsPhysical(false); setGiftCardKind('amount'); }}
                 className="flex-1 px-4 py-2 bg-[#FFFFFF] text-[#1B2D3C] font-bold text-xs uppercase tracking-wider border border-[#1B2D3C]/20 hover:bg-[#D6E2E9] transition-all cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                onClick={giftCardIsPhysical ? createGiftCardInStore : createGiftCardCheckout}
+                onClick={giftCardKind === 'activity' || giftCardIsPhysical ? createGiftCardInStore : createGiftCardCheckout}
                 disabled={giftCardCreating}
                 className="flex-1 px-4 py-2 bg-[#DBE7E4] text-[#1B2D3C] font-bold text-xs uppercase tracking-wider border border-[#1B2D3C]/20 hover:bg-[#D6E2E9] transition-all cursor-pointer disabled:opacity-50"
               >
-                {giftCardCreating ? 'Creating...' : giftCardIsPhysical ? 'Create (No Payment)' : 'Proceed to Payment'}
+                {giftCardCreating ? 'Creating...' : giftCardKind === 'activity' ? 'Create Voucher' : giftCardIsPhysical ? 'Create (No Payment)' : 'Proceed to Payment'}
               </button>
             </div>
           </div>
@@ -4887,14 +4935,23 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/70">Code</span>
                     <span className="text-xs font-mono font-bold text-[#1B2D3C]">{redeemBalanceResult.code}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/70">Original Amount</span>
-                    <span className="text-xs font-bold text-[#1B2D3C]">£{redeemBalanceResult.amount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/70">Balance</span>
-                    <span className="text-lg font-black text-[#1B2D3C]">£{redeemBalanceResult.balance.toFixed(2)}</span>
-                  </div>
+                  {redeemBalanceResult.covers ? (
+                    <div className="flex justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/70">Covers</span>
+                      <span className="text-xs font-bold text-purple-700 text-right">{redeemBalanceResult.covers}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/70">Original Amount</span>
+                        <span className="text-xs font-bold text-[#1B2D3C]">£{redeemBalanceResult.amount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/70">Balance</span>
+                        <span className="text-lg font-black text-[#1B2D3C]">£{redeemBalanceResult.balance.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/70">Status</span>
                     <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
@@ -4906,7 +4963,17 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 </div>
               )}
 
-              {redeemBalanceResult && redeemBalanceResult.status === 'active' && redeemBalanceResult.balance > 0 && (
+              {redeemBalanceResult && redeemBalanceResult.status === 'active' && redeemBalanceResult.covers && (
+                <button
+                  onClick={redeemGiftCard}
+                  disabled={redeeming}
+                  className="w-full px-4 py-2.5 bg-purple-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-purple-800 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {redeeming ? 'Marking...' : 'Mark as Used'}
+                </button>
+              )}
+
+              {redeemBalanceResult && redeemBalanceResult.status === 'active' && !redeemBalanceResult.covers && redeemBalanceResult.balance > 0 && (
                 <div className="space-y-2">
                   <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Amount to Redeem (£)</label>
                   <div className="flex gap-2">
@@ -4939,14 +5006,20 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               {redeemResult && (
                 <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-lg space-y-2">
                   <p className="text-xs font-bold text-emerald-800">Redemption Successful</p>
-                  <div className="flex justify-between">
-                    <span className="text-[10px] font-bold uppercase text-emerald-700">Discount Applied</span>
-                    <span className="text-sm font-black text-emerald-800">£{redeemResult.discount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[10px] font-bold uppercase text-emerald-700">Remaining Balance</span>
-                    <span className="text-sm font-bold text-emerald-800">£{redeemResult.balance.toFixed(2)}</span>
-                  </div>
+                  {redeemBalanceResult?.covers ? (
+                    <p className="text-[11px] font-bold text-emerald-800">Activity voucher marked as used.</p>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-[10px] font-bold uppercase text-emerald-700">Discount Applied</span>
+                        <span className="text-sm font-black text-emerald-800">£{redeemResult.discount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[10px] font-bold uppercase text-emerald-700">Remaining Balance</span>
+                        <span className="text-sm font-bold text-emerald-800">£{redeemResult.balance.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-[10px] font-bold uppercase text-emerald-700">Status</span>
                     <span className="text-[10px] font-bold uppercase text-emerald-700">{redeemResult.status}</span>

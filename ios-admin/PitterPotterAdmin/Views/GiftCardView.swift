@@ -518,10 +518,19 @@ struct GiftCardRowView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 4) {
-                Text("£\(String(format: "%.0f", card.amount))")
-                    .font(AppFont.heading(17))
-                    .foregroundStyle(PPBrand.charcoal)
-                if let balance = card.balance, balance != card.amount {
+                if card.isActivityVoucher {
+                    Text(card.covers ?? "")
+                        .font(AppFont.body(11, weight: .semibold))
+                        .foregroundStyle(PPBrand.charcoal)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 140)
+                } else {
+                    Text("£\(String(format: "%.0f", card.amount))")
+                        .font(AppFont.heading(17))
+                        .foregroundStyle(PPBrand.charcoal)
+                }
+                if !card.isActivityVoucher, let balance = card.balance, balance != card.amount {
                     Text("Bal £\(String(format: "%.0f", balance))")
                         .font(AppFont.body(11, weight: .medium))
                         .foregroundStyle(PPBrand.charcoal.opacity(0.5))

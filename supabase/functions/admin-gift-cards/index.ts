@@ -526,13 +526,6 @@ Deno.serve(async (req) => {
           code: card.code,
           covers: card.covers,
         });
-        await createNotification(supabase, {
-          type: 'gift_card_redeemed',
-          title: 'Activity Voucher Redeemed',
-          message: `${card.code} (${card.covers}) marked as used by ${staff.name}`,
-          entityType: 'gift_card',
-          entityId: card.id,
-        });
         return new Response(JSON.stringify({
           success: true,
           code: card.code,
@@ -568,15 +561,6 @@ Deno.serve(async (req) => {
         amount: redeemAmount,
         discount,
         newBalance,
-      });
-
-      // Create admin notification for gift card redemption
-      await createNotification(supabase, {
-        type: 'gift_card_redeemed',
-        title: 'Gift Card Redeemed',
-        message: `${card.code} redeemed for £${discount} by ${staff.name} (balance: £${newBalance})`,
-        entityType: 'gift_card',
-        entityId: card.id,
       });
 
       return new Response(JSON.stringify({

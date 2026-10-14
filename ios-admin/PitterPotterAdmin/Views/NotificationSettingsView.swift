@@ -11,9 +11,10 @@ struct NotificationSettingsView: View {
     @State private var newType: NotificationType = .bookingNew
     @State private var newStudio = "All"
 
+    // Only types that still produce notifications — status changes,
+    // redemptions and collection-ready alerts no longer fire.
     private let allTypes: [NotificationType] = [
-        .bookingNew, .bookingCancelled, .bookingStatusChanged, .bookingWalkIn,
-        .giftCardPurchased, .giftCardRedeemed, .collectionReady, .staffAction,
+        .bookingNew, .bookingWalkIn, .bookingCancelled, .bookingFailed, .giftCardPurchased,
     ]
     private let studios = ["All", "Putney", "Wimbledon"]
 

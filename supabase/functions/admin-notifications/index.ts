@@ -3,6 +3,18 @@ import { isObject, isNonEmptyString, isInteger } from '../_shared/validate.ts';
 import { verifyStaff } from '../_shared/auth.ts';
 import { corsHeaders as makeCorsHeaders, optionsResponse } from '../_shared/cors.ts';
 
+// The admin feed is deliberately limited to new bookings (online + walk-in),
+// paid-deposit failures, voucher purchases, and cancellations. Routine status
+// changes (seated/completed/etc.), redemptions and collection-ready alerts are
+// no longer created, and older rows of those types stay hidden.
+const ACTIVE_TYPES = [
+  'booking_new',
+  'booking_walk_in',
+  'booking_failed',
+  'gift_card_purchased',
+  'booking_cancelled',
+];
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return optionsResponse(req, true);
@@ -55,6 +67,7 @@ Deno.serve(async (req) => {
       let query = supabase
         .from('notifications')
         .select('*')
+        .in('type', ACTIVE_TYPES)
         .order('created_at', { ascending: false })
         .range(offset, offset + (isInteger(limit) ? limit : 50) - 1);
 
@@ -73,7 +86,8 @@ Deno.serve(async (req) => {
       let query = supabase
         .from('notifications')
         .select('id', { count: 'exact', head: true })
-        .is('read_at', null);
+        .is('read_at', null)
+        .in('type', ACTIVE_TYPES);
 
       if (studioFilter) {
         query = query.in('studio', [...studioFilter, 'All']);
@@ -132,6 +146,7 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from('notification_settings')
         .select('*')
+        .in('type', ACTIVE_TYPES)
         .order('type', { ascending: true })
         .order('studio', { ascending: true });
 
@@ -179,7 +194,7 @@ Deno.serve(async (req) => {
         });
       }
       const { type, studio: settingStudio } = body;
-      if (!isNonEmptyString(type) || !isNonEmptyString(settingStudio)) {
+      if (!isNonEmptyString(type) || !isNonEmptyString(settingStudio) || !ACTIVE_TYPES.includes(type)) {
         return new Response(JSON.stringify({ error: 'Missing type or studio' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

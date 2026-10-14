@@ -13,13 +13,22 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   booking_cancelled: 'Booking Cancelled',
   booking_status_changed: 'Booking Status Changed',
   booking_walk_in: 'Walk-in Booking',
+  booking_failed: 'Booking Failed (Paid)',
   gift_card_purchased: 'Gift Card Purchased',
   gift_card_redeemed: 'Gift Card Redeemed',
   collection_ready: 'Collection Ready',
   staff_action: 'Staff Action',
 };
 
-const ALL_TYPES = Object.keys(NOTIFICATION_TYPE_LABELS) as NotificationType[];
+// Only types that still produce notifications — status changes, redemptions
+// and collection-ready alerts no longer fire, so they can't be configured.
+const ALL_TYPES: NotificationType[] = [
+  'booking_new',
+  'booking_walk_in',
+  'booking_cancelled',
+  'booking_failed',
+  'gift_card_purchased',
+];
 const STUDIOS = ['All', 'Putney', 'Wimbledon'];
 
 interface Props {

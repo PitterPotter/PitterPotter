@@ -5,6 +5,7 @@ export type NotificationType =
   | 'booking_cancelled'
   | 'booking_status_changed'
   | 'booking_walk_in'
+  | 'booking_failed'
   | 'gift_card_purchased'
   | 'gift_card_redeemed'
   | 'collection_ready'

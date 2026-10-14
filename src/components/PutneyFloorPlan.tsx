@@ -252,7 +252,9 @@ export default function PutneyFloorPlan({
 
   const unassignedBookings = useMemo(() => {
     if (!selectedDate) return [];
-    return bookings.filter(b => b.date === selectedDate && b.studio === 'Putney' && !b.tableId && (b.status === 'pending' || b.status === 'confirmed'));
+    return bookings
+      .filter(b => b.date === selectedDate && b.studio === 'Putney' && !b.tableId && (b.status === 'pending' || b.status === 'confirmed'))
+      .sort(byTimeThenName);
   }, [bookings, selectedDate]);
 
   const blockedIdsForDate = useMemo(() => {

@@ -319,7 +319,9 @@ export default function WimbledonFloorPlan({
 
   const unassignedBookings = useMemo(() => {
     if (!selectedDate) return [];
-    return bookings.filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && !b.tableId && (b.status === 'pending' || b.status === 'confirmed'));
+    return bookings
+      .filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && !b.tableId && (b.status === 'pending' || b.status === 'confirmed'))
+      .sort(byTimeThenName);
   }, [bookings, selectedDate]);
 
   const blockedIdsForDate = useMemo(() => {

@@ -44,7 +44,7 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
-  const fontSerifBold = await pdfDoc.embedFont(StandardFonts.TimesBold);
+  const fontSerifBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
 
   // Soft palette from the flyer
   const cream = rgb(0.976, 0.965, 0.949);
@@ -272,29 +272,6 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
     }
   }
 
-  // QR code
-  const qrBytes = await generateQRCodeBytes(giftCard.code);
-  const qrSize = 48;
-  const qrX = width - 66;
-  const qrY = footerH + 22;
-  if (qrBytes) {
-    try {
-      const qrImage = await pdfDoc.embedPng(qrBytes);
-      page.drawImage(qrImage, { x: qrX, y: qrY, width: qrSize, height: qrSize });
-      const scanText = 'SCAN TO REDEEM';
-      const scanW = fontRegular.widthOfTextAtSize(scanText, 6);
-      page.drawText(scanText, {
-        x: qrX + (qrSize - scanW) / 2,
-        y: qrY - 10,
-        size: 6,
-        font: fontRegular,
-        color: charcoal,
-      });
-    } catch (e) {
-      console.error('Failed to embed QR code:', e);
-    }
-  }
-
   // Footer sage band
   page.drawRectangle({ x: 0, y: 0, width, height: footerH, color: sageDark });
 
@@ -329,6 +306,29 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
   page.drawText('52 Wimbledon Hill Road', { x: 365, y: addrY - 11, size: 6, font: fontRegular, color: white });
   page.drawText('London SW19 7PA', { x: 365, y: addrY - 21, size: 6, font: fontRegular, color: white });
   page.drawText('020 3770 4499', { x: 365, y: addrY - 31, size: 6, font: fontRegular, color: white });
+
+  // QR code inside the footer
+  const qrBytes = await generateQRCodeBytes(giftCard.code);
+  if (qrBytes) {
+    try {
+      const qrImage = await pdfDoc.embedPng(qrBytes);
+      const qrSize = 48;
+      const qrX = width - 70;
+      const qrY = 14;
+      page.drawImage(qrImage, { x: qrX, y: qrY, width: qrSize, height: qrSize });
+      const scanText = 'SCAN TO REDEEM';
+      const scanW = fontRegular.widthOfTextAtSize(scanText, 6);
+      page.drawText(scanText, {
+        x: qrX + (qrSize - scanW) / 2,
+        y: 7,
+        size: 6,
+        font: fontRegular,
+        color: cream,
+      });
+    } catch (e) {
+      console.error('Failed to embed QR code:', e);
+    }
+  }
 
   return await pdfDoc.save();
 }

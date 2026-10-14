@@ -21,32 +21,20 @@ enum TableStatus {
     case free, partial, full, selected
 }
 
-// Same colours as the web floor plan (BOOKING_COLOURS in WimbledonFloorPlan.tsx)
-private let BOOKING_COLOURS: [Color] = [
-    Color(hex: 0xE74C3C), Color(hex: 0x3498DB), Color(hex: 0x2ECC71), Color(hex: 0xF39C12), Color(hex: 0x9B59B6),
-    Color(hex: 0x1ABC9C), Color(hex: 0xE67E22), Color(hex: 0xE91E63), Color(hex: 0x00BCD4), Color(hex: 0x8BC34A),
-    Color(hex: 0xFF5722), Color(hex: 0x607D8B), Color(hex: 0x795548), Color(hex: 0x673AB7), Color(hex: 0x009688),
-]
-
-private func bookingColour(_ index: Int) -> Color {
-    BOOKING_COLOURS[index % BOOKING_COLOURS.count]
-}
-
 private func firstName(_ name: String) -> String {
     let trimmed = name.trimmingCharacters(in: .whitespaces)
     return trimmed.components(separatedBy: .whitespaces).first ?? name
 }
 
-private func sessionTag(_ type: String) -> String? {
-    switch type {
-    case "birthday-party": return "Party"
-    case "baby-shower-hen": return "Baby"
-    case "clay-imprints": return "Clay"
-    case "corporate": return "Corp"
-    case "exclusive-hire": return "Hire"
-    case "sip-and-paint": return "Sip"
-    default: return nil
-    }
+// "10:00" or "10:00-12:00" → "10am"; "14:30" → "2:30pm"
+private func shortTime(_ time: String) -> String {
+    let start = time.split(separator: "-").first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? time
+    let parts = start.split(separator: ":")
+    guard let h = Int(parts.first ?? "") else { return time }
+    let m = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+    let suffix = h >= 12 ? "pm" : "am"
+    let h12 = h % 12 == 0 ? 12 : h % 12
+    return m == 0 ? "\(h12)\(suffix)" : String(format: "%d:%02d%@", h12, m, suffix)
 }
 
 // Matches overlapsTwoHours in the web floor plans.
@@ -65,8 +53,6 @@ private func overlapsTwoHours(_ a: String, _ b: String) -> Bool {
 // All tables render at the same size on both platforms.
 private let TABLE_W: CGFloat = 80
 private let TABLE_H: CGFloat = 52
-private let CHAIR_R: CGFloat = 9
-private let CHAIR_GAP: CGFloat = 5
 private let PARTY_CAPACITY = 9
 
 struct PutneyTables {
@@ -196,14 +182,6 @@ struct FloorPlanView: View {
         dayBookings().filter { ($0.tableId ?? "").isEmpty }
     }
 
-    private var bookingColourMap: [String: Color] {
-        var map: [String: Color] = [:]
-        for (i, b) in visibleBookings.enumerated() {
-            map[b.id] = bookingColour(i)
-        }
-        return map
-    }
-
     private func partyAreaCapacity(_ area: String) -> (used: Int, total: Int, remaining: Int) {
         let tableIds = Set(tables.filter { $0.area == area }.map { "T\($0.id)" })
         let used = dayBookings()
@@ -259,8 +237,7 @@ struct FloorPlanView: View {
 
     private func occupantLabels(_ tableBookings: [Booking]) -> [String] {
         var labels = tableBookings.sorted { $0.time < $1.time }.prefix(2).map { b in
-            let start = b.time.split(separator: "-").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? b.time
-            return String("\(start) \(firstName(b.name))".prefix(16))
+            String("\(shortTime(b.time)) \(firstName(b.name)) \(b.paintersCount)p".prefix(18))
         }
         if tableBookings.count > 2 { labels.append("+\(tableBookings.count - 2) more") }
         return labels
@@ -355,43 +332,46 @@ struct FloorPlanView: View {
                 }
             }
 
-            // Booking colour legend — chips are draggable onto tables,
-            // tap a chip to highlight the table it's on
-            if !visibleBookings.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(Array(visibleBookings.enumerated()), id: \.element.id) { i, b in
-                            HStack(spacing: 4) {
-                                Text(firstName(b.name) + (sessionTag(b.sessionType).map { " · \($0)" } ?? ""))
-                                Text("· \(b.paintersCount)p · \(b.time)").opacity(0.7)
+            // Day's bookings listed vertically down the left of the plan —
+            // tap a chip to locate its table, drag onto a table to move it
+            HStack(alignment: .top, spacing: 8) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        if !visibleBookings.isEmpty {
+                            Text("\(visibleBookings.count) booking\(visibleBookings.count == 1 ? "" : "s")")
+                                .font(AppFont.body(9, weight: .bold))
+                                .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                                .textCase(.uppercase)
+                                .tracking(0.5)
+                            ForEach(visibleBookings) { b in
+                                Text("\(shortTime(b.time)) \(firstName(b.name)) \(b.paintersCount)p")
+                                    .font(AppFont.body(11, weight: .semibold))
+                                    .foregroundStyle(PPBrand.charcoal)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .draggable(b.id)
+                                    .onTapGesture {
+                                        if let t = (b.tableId ?? "").split(separator: ",").first {
+                                            selectedTable = t.trimmingCharacters(in: .whitespaces)
+                                        }
+                                    }
                             }
-                            .font(AppFont.body(10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(bookingColour(i))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .draggable(b.id)
-                            .onTapGesture {
-                                if let t = (b.tableId ?? "").split(separator: ",").first {
-                                    selectedTable = t.trimmingCharacters(in: .whitespaces)
-                                }
-                            }
+                        } else {
+                            legendItem(color: .white, stroke: PPBrand.charcoal, label: "Free")
+                            legendItem(color: Color(hex: 0xFEF9C3), stroke: Color(hex: 0xCA8A04), label: "Has bookings")
+                            legendItem(color: Color(hex: 0xEF4444), stroke: Color(hex: 0xB91C1C), label: "Slot taken")
+                            legendItem(color: PPBrand.charcoal, stroke: PPBrand.charcoal, label: "Selected")
                         }
                     }
+                    .padding(.vertical, 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            } else {
-                HStack(spacing: 12) {
-                    legendItem(color: .white, stroke: PPBrand.charcoal, label: "Free")
-                    legendItem(color: Color(hex: 0xFEF9C3), stroke: Color(hex: 0xCA8A04), label: "Has bookings")
-                    legendItem(color: Color(hex: 0xEF4444), stroke: Color(hex: 0xB91C1C), label: "Slot taken")
-                    legendItem(color: PPBrand.charcoal, stroke: PPBrand.charcoal, label: "Selected")
-                    Spacer()
-                }
-            }
+                .frame(width: 118)
 
-            // Floor plan fills all remaining space — drag pans in every direction
-            GeometryReader { planGeo in
+                // Floor plan fills the remaining space — drag pans in every direction
+                GeometryReader { planGeo in
                 let fitScale = min(planGeo.size.width / viewBox.width, planGeo.size.height / viewBox.height)
                 let displayScale = fitScale * zoomScale
                 let scaledW = viewBox.width * displayScale
@@ -491,6 +471,7 @@ struct FloorPlanView: View {
                 }
             }
             .frame(minHeight: 200)
+            }
 
             // Selected table bookings
             if let sel = selectedTable {
@@ -676,57 +657,12 @@ struct FloorPlanView: View {
             .position(x: x + w / 2, y: y + h / 2)
     }
 
-    private func chairPositions(_ table: FloorTable) -> [CGPoint] {
-        let w = TABLE_W, h = TABLE_H
-        var points: [CGPoint] = []
-        let topCount = table.chairs.filter { $0 == .top }.count
-        let bottomCount = table.chairs.filter { $0 == .bottom }.count
-        let leftCount = table.chairs.filter { $0 == .left }.count
-        let rightCount = table.chairs.filter { $0 == .right }.count
-
-        for i in 0..<topCount {
-            points.append(CGPoint(x: table.x + w / CGFloat(topCount + 1) * CGFloat(i + 1), y: table.y - CHAIR_R - CHAIR_GAP))
-        }
-        for i in 0..<bottomCount {
-            points.append(CGPoint(x: table.x + w / CGFloat(bottomCount + 1) * CGFloat(i + 1), y: table.y + h + CHAIR_R + CHAIR_GAP))
-        }
-        for i in 0..<leftCount {
-            points.append(CGPoint(x: table.x - CHAIR_R - CHAIR_GAP, y: table.y + h / CGFloat(leftCount + 1) * CGFloat(i + 1)))
-        }
-        for i in 0..<rightCount {
-            points.append(CGPoint(x: table.x + w + CHAIR_R + CHAIR_GAP, y: table.y + h / CGFloat(rightCount + 1) * CGFloat(i + 1)))
-        }
-        return points
-    }
-
     private func tableGroup(_ table: FloorTable) -> some View {
         let tid = "T\(table.id)"
         let stat = status(for: table)
-        let tableBookings = relevantBookings(tid)
-        let positions = chairPositions(table)
-        // Colour seats per booking, same as web
-        var chairColours = [Color?](repeating: nil, count: positions.count)
-        var seatIdx = 0
-        for b in tableBookings {
-            let colour = bookingColourMap[b.id] ?? PPBrand.charcoal
-            for _ in 0..<b.paintersCount where seatIdx < positions.count {
-                chairColours[seatIdx] = colour
-                seatIdx += 1
-            }
-        }
-        let usedSeats = chairColours.filter { $0 != nil }.count
-        let labels = occupantLabels(tableBookings)
+        let labels = occupantLabels(relevantBookings(tid))
 
         return ZStack {
-            // Chairs
-            ForEach(0..<positions.count, id: \.self) { i in
-                Circle()
-                    .fill(chairColours[i] ?? (stat == .selected ? Color(hex: 0x486581) : PPBrand.clay100))
-                    .overlay(Circle().stroke(chairColours[i] ?? PPBrand.charcoal, lineWidth: chairColours[i] != nil ? 1.8 : 1.2))
-                    .frame(width: CHAIR_R * 2, height: CHAIR_R * 2)
-                    .position(positions[i])
-            }
-
             // Drop-target highlight
             if dropTarget == tid {
                 RoundedRectangle(cornerRadius: 6)
@@ -745,7 +681,7 @@ struct FloorPlanView: View {
                 )
                 .overlay(
                     VStack(spacing: 1) {
-                        Text(usedSeats > 0 ? "\(tid) · \(usedSeats)/\(table.seats)" : tid)
+                        Text(tid)
                             .font(AppFont.heading(11, weight: .black))
                             .foregroundStyle(statusTextColor(stat))
                         if labels.isEmpty {

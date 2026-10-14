@@ -5,28 +5,16 @@ type TableSize = 'small' | 'large';
 type ChairSide = 'top' | 'bottom' | 'left' | 'right';
 type TableStatus = 'free' | 'partial' | 'full' | 'blocked' | 'selected';
 
-const BOOKING_COLOURS = [
-  '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
-  '#1abc9c', '#e67e22', '#e91e63', '#00bcd4', '#8bc34a',
-  '#ff5722', '#607d8b', '#795548', '#673ab7', '#009688',
-];
-
-function getBookingColour(index: number) {
-  return BOOKING_COLOURS[index % BOOKING_COLOURS.length];
-}
-
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
-const sessionTag = (type?: string): string | null => {
-  switch (type) {
-    case 'birthday-party': return 'Party';
-    case 'baby-shower-hen': return 'Baby';
-    case 'clay-imprints': return 'Clay';
-    case 'corporate': return 'Corp';
-    case 'exclusive-hire': return 'Hire';
-    case 'sip-and-paint': return 'Sip';
-    default: return null;
-  }
+const shortTime = (time: string) => {
+  const start = (time.split('-')[0] ?? time).trim();
+  const [h, m] = start.split(':');
+  const hour = parseInt(h, 10);
+  if (isNaN(hour)) return time;
+  const suffix = hour >= 12 ? 'pm' : 'am';
+  const h12 = hour % 12 || 12;
+  return m && m !== '00' ? `${h12}:${m}${suffix}` : `${h12}${suffix}`;
 };
 
 const byTimeThenName = (a: BookingInquiry, b: BookingInquiry) =>
@@ -66,8 +54,6 @@ interface BlockedTable {
 // Every table renders at the same size — matches the iOS floor plan.
 const TABLE_W = 80;
 const TABLE_H = 52;
-const CHAIR_R = 9;
-const CHAIR_GAP = 5;
 const BLOCKED_STORAGE_KEY = 'pitter_potter_blocked_tables';
 
 const PARTY_CAPACITY = 9;
@@ -223,61 +209,21 @@ export function useTableAnalytics(bookings: BookingInquiry[] = []) {
   }, [bookings]);
 }
 
-function Chair({ cx, cy, status, colour }: { cx: number; cy: number; status: TableStatus; colour: string | null }) {
-  const baseFill = status === 'blocked' ? '#9ca3af' : status === 'selected' ? '#486581' : '#D6E2E9';
-  const fill = colour ?? baseFill;
-  const stroke = colour ? colour : '#1B2D3C';
-  return (
-    <circle cx={cx} cy={cy} r={CHAIR_R} fill={fill} stroke={stroke} strokeWidth={colour ? 1.8 : 1.2}>
-      {colour && <title>Occupied</title>}
-    </circle>
-  );
-}
-
 function TableShape({
-  def, status, count, chairColours, occupantLabels, isDropTarget, onClick,
+  def, status, occupantLabels, isDropTarget, onClick,
 }: {
   def: PositionedTable;
   status: TableStatus;
-  count: number;
-  chairColours: (string | null)[];
   occupantLabels: string[];
   isDropTarget?: boolean;
   onClick: () => void;
 }) {
   const w = tableWidth(def.size);
   const h = tableHeight(def.size);
-  const chairs: { cx: number; cy: number }[] = [];
-
-  const topChairs = def.chairs.filter(c => c === 'top').length;
-  const bottomChairs = def.chairs.filter(c => c === 'bottom').length;
-  const leftChairs = def.chairs.filter(c => c === 'left').length;
-  const rightChairs = def.chairs.filter(c => c === 'right').length;
-
-  for (let i = 0; i < topChairs; i++) {
-    const spacing = w / (topChairs + 1);
-    chairs.push({ cx: def.x + spacing * (i + 1), cy: def.y - CHAIR_R - CHAIR_GAP });
-  }
-  for (let i = 0; i < bottomChairs; i++) {
-    const spacing = w / (bottomChairs + 1);
-    chairs.push({ cx: def.x + spacing * (i + 1), cy: def.y + h + CHAIR_R + CHAIR_GAP });
-  }
-  for (let i = 0; i < leftChairs; i++) {
-    const spacing = h / (leftChairs + 1);
-    chairs.push({ cx: def.x - CHAIR_R - CHAIR_GAP, cy: def.y + spacing * (i + 1) });
-  }
-  for (let i = 0; i < rightChairs; i++) {
-    const spacing = h / (rightChairs + 1);
-    chairs.push({ cx: def.x + w + CHAIR_R + CHAIR_GAP, cy: def.y + spacing * (i + 1) });
-  }
-
-  const totalSeats = def.chairs.length;
-  const occupiedCount = chairColours.filter(Boolean).length;
-  const label = status === 'blocked' ? 'BLOCKED' : occupiedCount > 0 ? `${occupiedCount}/${totalSeats}` : 'free';
+  const label = status === 'blocked' ? 'BLOCKED' : 'free';
 
   return (
     <g onClick={onClick} className="cursor-pointer" role="button" aria-label={`Table ${def.id}`}>
-      {chairs.map((c, i) => <Chair key={i} cx={c.cx} cy={c.cy} status={status} colour={chairColours[i] ?? null} />)}
       {isDropTarget && (
         <rect x={def.x - 4} y={def.y - 4} width={w + 8} height={h + 8} rx={6}
           fill="#16a34a22" stroke="#16a34a" strokeWidth={2} strokeDasharray="5 3" />
@@ -290,7 +236,7 @@ function TableShape({
       />
       <text x={def.x + w / 2} y={def.y + h / 2 - (occupantLabels.length ? 10 : 6)} textAnchor="middle" dominantBaseline="middle"
         fontSize={11} fontWeight="800" fill={STATUS_TEXT[status]}>
-        T{def.id}{occupiedCount > 0 ? ` · ${occupiedCount}/${totalSeats}` : ''}
+        T{def.id}
       </text>
       {occupantLabels.length ? (
         occupantLabels.map((l, i) => (
@@ -455,20 +401,11 @@ export default function WimbledonFloorPlan({
     setBlockedTables(next);
   };
 
-  const bookingColourMap = useMemo(() => {
-    const map = new Map<string, string>();
-    const relevantBookings = bookings.filter(
-      b => b.date === selectedDate && b.studio === 'Wimbledon' && b.status !== 'cancelled' && b.status !== 'no_show' && (!selectedTime || (b.time && overlapsTwoHours(b.time, selectedTime)))
-    ).sort(byTimeThenName);
-    relevantBookings.forEach((b, i) => { map.set(b.id, getBookingColour(i)); });
-    return map;
-  }, [bookings, selectedDate, selectedTime]);
-
   const bookingLegend = useMemo(() => {
     return bookings
       .filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && b.status !== 'cancelled' && b.status !== 'no_show' && (!selectedTime || (b.time && overlapsTwoHours(b.time, selectedTime))))
       .sort(byTimeThenName)
-      .map((b, i) => ({ id: b.id, name: firstName(b.name), tag: sessionTag(b.sessionType), painters: b.paintersCount, colour: getBookingColour(i), time: b.time, tableId: b.tableId }));
+      .map(b => ({ id: b.id, name: firstName(b.name), painters: b.paintersCount, time: b.time, tableId: b.tableId }));
   }, [bookings, selectedDate, selectedTime]);
 
   const handleDrop = (tid: string) => (e: React.DragEvent) => {
@@ -482,22 +419,12 @@ export default function WimbledonFloorPlan({
     const tid = `T${t.id}`;
     const status = getStatus(tid);
     const bookingsForTable = bookingsByTable.get(tid) || [];
-    const count = status === 'blocked' ? 0 : bookingsForTable.length;
-    const totalSeats = t.chairs.length;
-    const chairColours: (string | null)[] = Array(totalSeats).fill(null);
-    let seatIdx = 0;
     const relevantBookings = (selectedTime
       ? bookingsForTable.filter(b => b.time && overlapsTwoHours(b.time, selectedTime))
       : bookingsForTable).sort(byTimeThenName);
-    for (const b of relevantBookings) {
-      const colour = bookingColourMap.get(b.id) ?? '#1B2D3C';
-      for (let p = 0; p < b.paintersCount && seatIdx < totalSeats; p++, seatIdx++) {
-        chairColours[seatIdx] = colour;
-      }
-    }
     const occupantLabels = relevantBookings
       .slice(0, 2)
-      .map(b => `${b.time.split('-')[0].trim()} ${firstName(b.name)}`.slice(0, 16));
+      .map(b => `${shortTime(b.time)} ${firstName(b.name)} ${b.paintersCount}p`.slice(0, 18));
     if (relevantBookings.length > 2) occupantLabels.push(`+${relevantBookings.length - 2} more`);
     return (
       <g
@@ -509,8 +436,6 @@ export default function WimbledonFloorPlan({
         <TableShape
           def={t}
           status={status}
-          count={count}
-          chairColours={chairColours}
           occupantLabels={occupantLabels}
           isDropTarget={dragTarget === tid}
           onClick={() => handleClick(t.id)}
@@ -607,37 +532,39 @@ export default function WimbledonFloorPlan({
         </div>
       )}
 
-      {/* Booking colour legend */}
-      {bookingLegend.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {bookingLegend.map((b, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold text-white ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
-              style={{ backgroundColor: b.colour }}
-              draggable={!!onMoveBooking}
-              onDragStart={onMoveBooking ? (e) => e.dataTransfer.setData('text/plain', b.id) : undefined}
-              onClick={() => { const t = (b.tableId ?? '').split(',')[0]?.trim(); if (t) setLocalSelected(t); }}
-              title="Click to locate · drag onto a table to move"
-            >
-              <span>{b.name}{b.tag ? ` · ${b.tag}` : ''}</span>
-              <span className="opacity-70">· {b.painters}p</span>
-              {!selectedTime && <span className="opacity-70">· {b.time}</span>}
+      <div className="flex gap-4 items-start">
+        {/* Day's bookings — vertical list down the left of the floor plan */}
+        <div className="w-44 shrink-0 max-h-[620px] overflow-y-auto space-y-1.5">
+          {bookingLegend.length > 0 ? (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#1B2D3C]/60 px-0.5 mb-1">
+                {bookingLegend.length} booking{bookingLegend.length !== 1 ? 's' : ''}
+              </p>
+              {bookingLegend.map((b, i) => (
+                <div
+                  key={i}
+                  className={`w-full px-2 py-1.5 rounded-md text-[11px] font-semibold text-[#1B2D3C] hover:bg-[#1B2D3C]/5 ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
+                  draggable={!!onMoveBooking}
+                  onDragStart={onMoveBooking ? (e) => e.dataTransfer.setData('text/plain', b.id) : undefined}
+                  onClick={() => { const t = (b.tableId ?? '').split(',')[0]?.trim(); if (t) setLocalSelected(t); }}
+                  title="Click to locate · drag onto a table to move"
+                >
+                  {shortTime(b.time)} {b.name} {b.painters}p
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="space-y-2 text-[10px] font-semibold text-[#1B2D3C]/70">
+              <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-white border border-[#1B2D3C] rounded-sm shrink-0" /><span>Free</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-yellow-100 border border-yellow-600 rounded-sm shrink-0" /><span>Has bookings</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-red-500 border border-red-700 rounded-sm shrink-0" /><span>Selected slot taken</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-gray-500 border border-gray-700 rounded-sm shrink-0" /><span>Blocked</span></div>
             </div>
-          ))}
+          )}
         </div>
-      )}
-      {bookingLegend.length === 0 && (
-        <div className="flex flex-wrap gap-3 text-[10px] font-semibold text-[#1B2D3C]/70">
-          <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-white border border-[#1B2D3C] rounded-sm" /><span>Free</span></div>
-          <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-yellow-100 border border-yellow-600 rounded-sm" /><span>Has bookings</span></div>
-          <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-red-500 border border-red-700 rounded-sm" /><span>Selected slot taken</span></div>
-          <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-gray-500 border border-gray-700 rounded-sm" /><span>Blocked</span></div>
-        </div>
-      )}
 
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <svg viewBox="0 0 460 745" className="w-full max-w-[460px] h-auto mx-auto" style={{ minHeight: '600px' }}>
+        <div className="overflow-x-auto flex-1 min-w-0">
+          <svg viewBox="0 0 460 745" className="w-full max-w-[460px] h-auto mx-auto" style={{ minHeight: '600px' }}>
           {/* Front area */}
           <rect x={15} y={10} width={430} height={425} rx={8} fill="#F8FAFB" stroke="#1B2D3C" strokeOpacity={0.3} strokeWidth={1} strokeDasharray="4 3" />
           <text x={230} y={28} textAnchor="middle" fontSize={10} fontWeight="700" fill="#1B2D3C99" letterSpacing="2">FRONT</text>
@@ -667,6 +594,7 @@ export default function WimbledonFloorPlan({
           {PARTY_1_TABLES.map(renderTable)}
           {PARTY_2_TABLES.map(renderTable)}
         </svg>
+        </div>
       </div>
 
       {showTablePanel && selectedTable && selectedDate && (

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookingInquiry } from '../types';
+import { allocateResources, formatResources, isPartySessionType } from '../lib/allocation';
 
 type TableSize = 'small' | 'large';
 type ChairSide = 'top' | 'bottom' | 'left' | 'right';
 type TableStatus = 'free' | 'partial' | 'full' | 'blocked' | 'selected';
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+
+const parseTables = (t?: string) => (t ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
 const shortTime = (time: string) => {
   const start = (time.split('-')[0] ?? time).trim();
@@ -55,8 +58,6 @@ interface BlockedTable {
 const TABLE_W = 80;
 const TABLE_H = 52;
 const BLOCKED_STORAGE_KEY = 'pitter_potter_blocked_tables';
-
-const PARTY_CAPACITY = 9;
 
 const STATUS_FILL: Record<TableStatus, string> = {
   free: '#FFFFFF',
@@ -162,27 +163,6 @@ export function findMultipleTables(
     seated += t.chairs.length;
   }
   return result;
-}
-
-export function computePartyAreaCapacity(
-  bookings: BookingInquiry[],
-  blockedTables: BlockedTable[],
-  date: string,
-  areaTables: PositionedTable[]
-): { used: number; total: number; remaining: number; percentage: number } {
-  const total = PARTY_CAPACITY;
-  const tableIds = new Set(areaTables.map(t => `T${t.id}`));
-  const blockedIds = new Set(
-    blockedTables
-      .filter(b => b.date === date)
-      .flatMap(b => b.tableId.split(',').map(t => t.trim()).filter(tid => tableIds.has(tid)))
-  );
-  const used = bookings
-    .filter(b => b.date === date && b.tableId)
-    .filter(b => b.tableId.split(',').map(t => t.trim()).some(tid => tableIds.has(tid)))
-    .reduce((sum, b) => sum + b.paintersCount, 0);
-  const remaining = Math.max(0, total - used);
-  return { used, total, remaining, percentage: (used / total) * 100 };
 }
 
 export function useTableAnalytics(bookings: BookingInquiry[] = []) {
@@ -307,6 +287,7 @@ export default function WimbledonFloorPlan({
   const [localSelected, setLocalSelected] = useState<string | null>(null);
   const [dragTarget, setDragTarget] = useState<string | null>(null);
   const [pendingAssignId, setPendingAssignId] = useState<string | null>(null);
+  const [pendingTables, setPendingTables] = useState<string[]>([]);
   const [blockedTables, setBlockedTables] = useState<BlockedTable[]>([]);
   const [blockReason, setBlockReason] = useState('');
   const [showBlockInput, setShowBlockInput] = useState(false);
@@ -359,11 +340,14 @@ export default function WimbledonFloorPlan({
 
   const handleClick = (id: number) => {
     const tid = `T${id}`;
+    // Pending-assign mode: each click toggles that table on the booking,
+    // staying in the mode until Done — lets a booking span T5+T6 etc.
     if (pendingAssignId && onMoveBooking) {
-      onMoveBooking(pendingAssignId, tid);
-      setPendingAssignId(null);
-      setLocalSelected(tid);
-      onTableClick?.(tid);
+      const next = pendingTables.includes(tid)
+        ? pendingTables.filter(t => t !== tid)
+        : [...pendingTables, tid];
+      setPendingTables(next);
+      onMoveBooking(pendingAssignId, next.join(', '));
       return;
     }
     if (readOnly) {
@@ -380,9 +364,6 @@ export default function WimbledonFloorPlan({
   const selectedTable = localSelected ? allTables.find(t => `T${t.id}` === localSelected) : null;
   const selectedBookings = localSelected ? (bookingsByTable.get(localSelected) || []).sort((a, b) => a.time.localeCompare(b.time)) : [];
   const selectedBlock = localSelected ? blockedTables.find(b => b.tableId.split(',').map(t => t.trim()).includes(localSelected) && b.date === selectedDate) : null;
-
-  const party1Capacity = selectedDate ? computePartyAreaCapacity(bookings, blockedTables, selectedDate, PARTY_1_TABLES) : null;
-  const party2Capacity = selectedDate ? computePartyAreaCapacity(bookings, blockedTables, selectedDate, PARTY_2_TABLES) : null;
 
   const handleBlock = () => {
     if (!localSelected || !selectedDate) return;
@@ -408,11 +389,75 @@ export default function WimbledonFloorPlan({
       .map(b => ({ id: b.id, name: firstName(b.name), painters: b.paintersCount, time: b.time, tableId: b.tableId }));
   }, [bookings, selectedDate, selectedTime]);
 
+  // Dropping appends the table to the booking's set (drag onto T5 then T6
+  // gives "T5, T6") and keeps pending mode open for further drops.
   const handleDrop = (tid: string) => (e: React.DragEvent) => {
     e.preventDefault();
     const bookingId = e.dataTransfer.getData('text/plain');
-    if (bookingId && onMoveBooking) onMoveBooking(bookingId, tid);
+    if (bookingId && onMoveBooking) {
+      const base = pendingAssignId === bookingId
+        ? pendingTables
+        : parseTables(bookings.find(b => b.id === bookingId)?.tableId);
+      if (!base.includes(tid)) {
+        const next = [...base, tid];
+        onMoveBooking(bookingId, next.join(', '));
+        setPendingAssignId(bookingId);
+        setPendingTables(next);
+      }
+    }
     setDragTarget(null);
+  };
+
+  const togglePending = (bookingId: string, tableId?: string) => {
+    if (pendingAssignId === bookingId) {
+      setPendingAssignId(null);
+      setPendingTables([]);
+      return;
+    }
+    setPendingAssignId(bookingId);
+    setPendingTables(parseTables(tableId));
+  };
+
+  // Assign every unassigned booking using the allocation engine's seating
+  // rules. Simulates against a local copy so sequential picks don't collide.
+  const handleAutoAssign = () => {
+    if (!onMoveBooking || !selectedDate) return;
+    const sim = bookings.map(b => ({
+      ...b,
+      table_id: b.tableId,
+      session_type: b.sessionType,
+      painters_count: b.paintersCount,
+    })) as (BookingInquiry & { table_id?: string; session_type?: string; painters_count?: number })[];
+    const targets = sim
+      .filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && b.status !== 'cancelled' && b.status !== 'no_show' && !(b.tableId ?? '').trim())
+      .sort(byTimeThenName);
+    for (const b of targets) {
+      const allocation = allocateResources({
+        studio: 'Wimbledon',
+        date: b.date,
+        time: b.time,
+        paintersCount: b.paintersCount,
+        sessionType: b.sessionType,
+        partyArea: isPartySessionType(b.sessionType) && b.paintersCount > 14 ? 'PA1+PA2' : undefined,
+        excludeBookingId: b.id,
+      }, sim);
+      if (!allocation.success) continue;
+      const tableId = formatResources(allocation.resources);
+      if (!tableId) continue;
+      onMoveBooking(b.id, tableId);
+      b.tableId = tableId;
+      b.table_id = tableId;
+      b.resources = allocation.resources;
+    }
+  };
+
+  // Clear all of the day's assignments so bookings can be dragged by hand.
+  const handleManualAssign = () => {
+    if (!onMoveBooking || !selectedDate) return;
+    if (!window.confirm('Clear all table assignments for this date? You can then drag bookings onto tables manually.')) return;
+    bookings
+      .filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && b.status !== 'cancelled' && b.status !== 'no_show' && (b.tableId ?? '').trim())
+      .forEach(b => onMoveBooking(b.id, ''));
   };
 
   const renderTable = (t: PositionedTable) => {
@@ -437,7 +482,7 @@ export default function WimbledonFloorPlan({
           def={t}
           status={status}
           occupantLabels={occupantLabels}
-          isDropTarget={dragTarget === tid}
+          isDropTarget={dragTarget === tid || (pendingAssignId != null && pendingTables.includes(tid))}
           onClick={() => handleClick(t.id)}
         />
       </g>
@@ -446,29 +491,25 @@ export default function WimbledonFloorPlan({
 
   return (
     <div className="bg-white border border-[#1B2D3C]/20 rounded-xl p-4 space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h3 className="font-heading font-black text-[#1B2D3C] text-base">Wimbledon Studio</h3>
-          <p className="text-[10px] text-[#1B2D3C]/50 font-semibold mt-0.5">18 tables · 52 Wimbledon Hill Road, London, SW19 7PA</p>
-        </div>
-        {selectedTable && (
+      {selectedTable && (
+        <div className="flex justify-end">
           <div className="bg-[#DBE7E4] text-[#1B2D3C] px-3 py-1.5 rounded-lg text-xs font-bold">
             {selectedTable.label} selected · {selectedTable.chairs.length} seats
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Pending assign banner — click mode alternative to drag & drop */}
       {pendingAssignId && (
         <div className="flex items-center justify-between bg-emerald-50 border border-emerald-300 rounded-lg px-3 py-2">
           <p className="text-[11px] font-bold text-emerald-800">
-            Assigning {firstName(bookings.find(b => b.id === pendingAssignId)?.name || 'booking')} — click a table
+            Assigning {firstName(bookings.find(b => b.id === pendingAssignId)?.name || 'booking')}{pendingTables.length ? ` → ${pendingTables.join(', ')}` : ''} — click or drop tables to add/remove
           </p>
           <button
-            onClick={() => setPendingAssignId(null)}
+            onClick={() => { setPendingAssignId(null); setPendingTables([]); }}
             className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 cursor-pointer"
           >
-            Cancel
+            Done
           </button>
         </div>
       )}
@@ -490,11 +531,11 @@ export default function WimbledonFloorPlan({
                 }`}
                 draggable={!!onMoveBooking}
                 onDragStart={onMoveBooking ? (e) => e.dataTransfer.setData('text/plain', b.id) : undefined}
-                onClick={onMoveBooking ? () => setPendingAssignId(prev => prev === b.id ? null : b.id) : undefined}
+                onClick={onMoveBooking ? () => togglePending(b.id, b.tableId) : undefined}
               >
                 <span>{firstName(b.name)} · {b.time} · {b.paintersCount}p</span>
                 <span className="text-amber-600">
-                  {onMoveBooking ? (pendingAssignId === b.id ? 'click a table to assign' : 'click or drag onto a table') : b.status}
+                  {onMoveBooking ? (pendingAssignId === b.id ? 'click tables to add/remove' : 'click or drag onto a table') : b.status}
                 </span>
               </div>
             ))}
@@ -502,33 +543,20 @@ export default function WimbledonFloorPlan({
         </div>
       )}
 
-      {/* Party area capacity bars */}
-      {selectedDate && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {party1Capacity && (
-            <div className="bg-[#f0fdf4] border border-green-200 rounded-lg p-3">
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-green-800 mb-1">
-                <span>Party Area 1</span>
-                <span>{party1Capacity.used}/{party1Capacity.total}</span>
-              </div>
-              <div className="h-2 bg-green-200 rounded-full overflow-hidden">
-                <div className="h-full bg-green-600 rounded-full transition-all" style={{ width: `${party1Capacity.percentage}%` }} />
-              </div>
-              <p className="text-[10px] text-green-700 mt-1 font-semibold">{party1Capacity.remaining} seats remaining</p>
-            </div>
-          )}
-          {party2Capacity && (
-            <div className="bg-[#eff6ff] border border-blue-200 rounded-lg p-3">
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-blue-800 mb-1">
-                <span>Party Area 2</span>
-                <span>{party2Capacity.used}/{party2Capacity.total}</span>
-              </div>
-              <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${party2Capacity.percentage}%` }} />
-              </div>
-              <p className="text-[10px] text-blue-700 mt-1 font-semibold">{party2Capacity.remaining} seats remaining</p>
-            </div>
-          )}
+      {onMoveBooking && selectedDate && (
+        <div className="flex gap-2">
+          <button
+            onClick={handleAutoAssign}
+            className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-[#1B2D3C] text-white hover:bg-[#1B2D3C]/90 cursor-pointer"
+          >
+            Auto assign
+          </button>
+          <button
+            onClick={handleManualAssign}
+            className="px-3 py-1.5 rounded-lg text-[11px] font-bold border border-[#1B2D3C]/30 text-[#1B2D3C] hover:bg-[#1B2D3C]/5 cursor-pointer"
+          >
+            Manual assign
+          </button>
         </div>
       )}
 
@@ -543,13 +571,16 @@ export default function WimbledonFloorPlan({
               {bookingLegend.map((b, i) => (
                 <div
                   key={i}
-                  className={`w-full px-2 py-1.5 rounded-md text-[11px] font-semibold text-[#1B2D3C] hover:bg-[#1B2D3C]/5 ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
+                  className={`w-full px-2 py-1.5 rounded-md text-[11px] font-semibold text-[#1B2D3C] ${pendingAssignId === b.id ? 'bg-emerald-100' : 'hover:bg-[#1B2D3C]/5'} ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
                   draggable={!!onMoveBooking}
                   onDragStart={onMoveBooking ? (e) => e.dataTransfer.setData('text/plain', b.id) : undefined}
-                  onClick={() => { const t = (b.tableId ?? '').split(',')[0]?.trim(); if (t) setLocalSelected(t); }}
-                  title="Click to locate · drag onto a table to move"
+                  onClick={() => {
+                    if (onMoveBooking) { togglePending(b.id, b.tableId); return; }
+                    const t = (b.tableId ?? '').split(',')[0]?.trim(); if (t) setLocalSelected(t);
+                  }}
+                  title={onMoveBooking ? "Click to assign tables · drag onto tables to add" : "Click to locate its table"}
                 >
-                  {shortTime(b.time)} {b.name} {b.painters}p
+                  {shortTime(b.time)} {b.name} {b.painters}p{b.tableId ? ` – ${b.tableId}` : ''}
                 </div>
               ))}
             </>

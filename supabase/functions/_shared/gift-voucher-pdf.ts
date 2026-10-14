@@ -13,7 +13,7 @@ interface VoucherGiftCard {
 
 async function generateQRCodeBytes(text: string): Promise<Uint8Array | null> {
   try {
-    const response = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(text)}&bgcolor=FFFFFF&color=1B2D3C&margin=0`);
+    const response = await fetch(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(text)}&bgcolor=FFFFFF&color=6B7D63&margin=0`);
     if (!response.ok) return null;
     const arrayBuffer = await response.arrayBuffer();
     return new Uint8Array(arrayBuffer);
@@ -44,17 +44,20 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  const charcoal = rgb(0.106, 0.176, 0.235); // #1B2D3C
-  const sage = rgb(0.839, 0.906, 0.894);     // #D6E2E9
-  const sageDeep = rgb(0.65, 0.78, 0.75);
-  const cream = rgb(0.97, 0.96, 0.93);
+  // Soft colour palette inspired by the sip & paint flyer
+  const cream = rgb(0.976, 0.965, 0.949);       // warm off-white background
+  const sage = rgb(0.71, 0.78, 0.70);           // muted sage
+  const sageDark = rgb(0.42, 0.49, 0.39);       // olive green
+  const terracotta = rgb(0.80, 0.49, 0.46);     // dusty rose / terracotta
+  const terracottaLight = rgb(0.93, 0.79, 0.77);
+  const charcoal = rgb(0.24, 0.24, 0.24);       // near-black text
   const white = rgb(1, 1, 1);
-  const grey = rgb(0.45, 0.45, 0.45);
+  const grey = rgb(0.50, 0.48, 0.46);
 
   const margin = 10;
-  const bannerH = 70;
-  const footerH = 52;
-  const contentPad = 8;
+  const bannerH = 82;
+  const footerH = 50;
+  const contentPad = 16;
 
   const bannerBottom = height - margin - bannerH;
   const contentTop = bannerBottom - contentPad;
@@ -62,54 +65,73 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
   const contentX = margin + contentPad;
   const contentW = width - 2 * (margin + contentPad);
 
-  // Outer cream card
+  // Outer cream card with terracotta border
   page.drawRectangle({
     x: margin,
     y: margin,
     width: width - 2 * margin,
     height: height - 2 * margin,
     color: cream,
-    borderColor: charcoal,
+    borderColor: terracotta,
     borderWidth: 1.5,
   });
 
-  // Top sage banner
+  // Terracotta top banner
   page.drawRectangle({
     x: margin,
     y: bannerBottom,
     width: width - 2 * margin,
     height: bannerH,
-    color: sage,
+    color: terracotta,
   });
+
+  // Olive accent strip under the banner
   page.drawRectangle({
     x: margin,
     y: bannerBottom,
     width: width - 2 * margin,
-    height: 2,
-    color: charcoal,
+    height: 6,
+    color: sageDark,
   });
 
-  // Bottom charcoal footer
+  // Olive footer
   page.drawRectangle({
     x: margin,
     y: margin,
     width: width - 2 * margin,
     height: footerH,
-    color: charcoal,
+    color: sageDark,
   });
 
-  // Inner white content area
+  // White main content panel
   page.drawRectangle({
     x: contentX,
     y: contentBottom,
     width: contentW,
     height: contentTop - contentBottom,
     color: white,
-    borderColor: sageDeep,
+    borderColor: sage,
     borderWidth: 1,
   });
 
-  // Logo from website
+  // Decorative corner squares
+  const accentSize = 12;
+  page.drawRectangle({
+    x: contentX + 8,
+    y: contentTop - 8 - accentSize,
+    width: accentSize,
+    height: accentSize,
+    color: sage,
+  });
+  page.drawRectangle({
+    x: contentX + contentW - 8 - accentSize,
+    y: contentBottom + 8,
+    width: accentSize,
+    height: accentSize,
+    color: terracotta,
+  });
+
+  // Logo badge on the terracotta banner
   let logoImg: any = null;
   try {
     const logoResp = await fetch('https://www.pitterpotter.co.uk/pp_logo.png');
@@ -121,56 +143,66 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
     console.error('Failed to load logo:', e);
   }
 
-  const centerX = width / 2;
-  const logoTop = height - margin - 12;
+  const badgeX = contentX;
+  const badgeW = 132;
+  const badgeH = 58;
+  const badgeY = bannerBottom + (bannerH - badgeH) / 2;
+
+  page.drawRectangle({
+    x: badgeX,
+    y: badgeY,
+    width: badgeW,
+    height: badgeH,
+    color: cream,
+    borderColor: terracottaLight,
+    borderWidth: 1,
+  });
 
   if (logoImg) {
-    const logoH = 32;
+    const logoH = 34;
     const logoW = (logoImg.width / logoImg.height) * logoH;
+    const scale = logoW > badgeW - 24 ? (badgeW - 24) / logoW : 1;
     page.drawImage(logoImg, {
-      x: centerX - logoW / 2,
-      y: logoTop - logoH,
-      width: logoW,
-      height: logoH,
+      x: badgeX + (badgeW - logoW * scale) / 2,
+      y: badgeY + (badgeH - logoH * scale) / 2,
+      width: logoW * scale,
+      height: logoH * scale,
     });
   } else {
     const fallback = 'Pitter Potter';
-    const fw = fontBold.widthOfTextAtSize(fallback, 20);
+    const fw = fontBold.widthOfTextAtSize(fallback, 16);
     page.drawText(fallback, {
-      x: centerX - fw / 2,
-      y: logoTop - 26,
-      size: 20,
+      x: badgeX + (badgeW - fw) / 2,
+      y: badgeY + badgeH / 2 - 5,
+      size: 16,
       font: fontBold,
       color: charcoal,
     });
   }
 
-  const tagline = 'Pottery Painting Studio';
-  const tagW = fontRegular.widthOfTextAtSize(tagline, 9);
-  page.drawText(tagline, {
-    x: centerX - tagW / 2,
-    y: logoTop - 46,
-    size: 9,
-    font: fontRegular,
-    color: charcoal,
-  });
-
-  // Gift voucher title
+  // Title on terracotta banner
+  const headerTextX = badgeX + badgeW + 26;
   const titleText = 'GIFT VOUCHER';
-  const titleW = fontBold.widthOfTextAtSize(titleText, 16);
-  const titleY = contentTop - 24;
   page.drawText(titleText, {
-    x: centerX - titleW / 2,
-    y: titleY,
-    size: 16,
+    x: headerTextX,
+    y: bannerBottom + bannerH - 38,
+    size: 22,
     font: fontBold,
-    color: charcoal,
+    color: white,
+  });
+  const tagline = 'Pottery Painting Studio';
+  page.drawText(tagline, {
+    x: headerTextX,
+    y: bannerBottom + bannerH - 56,
+    size: 10,
+    font: fontRegular,
+    color: white,
   });
 
-  // Value / covers panel
-  const panelPadding = 40;
+  // Central value / covers panel in terracotta
+  const panelPadding = 36;
   const maxPanelWidth = contentW - 2 * panelPadding;
-  const valueY = titleY - 14;
+  const valueY = contentTop - 28;
   let valuePanelBottom = valueY;
 
   if (giftCard.covers) {
@@ -211,8 +243,8 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
       y: valuePanelBottom,
       width: panelW,
       height: panelH,
-      color: sage,
-      borderColor: sageDeep,
+      color: terracotta,
+      borderColor: terracottaLight,
       borderWidth: 1,
     });
 
@@ -223,14 +255,14 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
         y: valuePanelBottom + 10 + (lines.length - 1 - i) * lineH,
         size: coversSize,
         font: fontBold,
-        color: charcoal,
+        color: white,
       });
     });
   } else {
     const amountStr = `\u00A3${Number(giftCard.amount).toFixed(2)}`;
     const amountW = fontBold.widthOfTextAtSize(amountStr, 36);
     const panelW = amountW + 2 * panelPadding;
-    const panelH = 46;
+    const panelH = 50;
     const panelX = contentX + (contentW - panelW) / 2;
     valuePanelBottom = valueY - panelH;
 
@@ -239,25 +271,34 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
       y: valuePanelBottom,
       width: panelW,
       height: panelH,
-      color: sage,
-      borderColor: sageDeep,
+      color: terracotta,
+      borderColor: terracottaLight,
       borderWidth: 1,
     });
     page.drawText(amountStr, {
       x: panelX + (panelW - amountW) / 2,
-      y: valuePanelBottom + 10,
+      y: valuePanelBottom + 12,
       size: 36,
       font: fontBold,
-      color: charcoal,
+      color: white,
     });
   }
 
+  // Decorative divider under the value panel
+  page.drawRectangle({
+    x: contentX + 40,
+    y: valuePanelBottom - 8,
+    width: contentW - 80,
+    height: 1,
+    color: terracottaLight,
+  });
+
   // Details section
-  const detailsTop = valuePanelBottom - 22;
-  const leftX = contentX + 18;
-  const labelGap = 44;
-  const rightW = 170;
-  const rightX = contentX + contentW - rightW - 18;
+  const detailsTop = valuePanelBottom - 24;
+  const leftX = contentX + 24;
+  const labelGap = 42;
+  const rightW = 178;
+  const rightX = contentX + contentW - rightW - 24;
 
   const sender = sanitize(giftCard.sender_name, 'Anonymous');
   const recipient = sanitize(giftCard.recipient_name, 'Valued Customer');
@@ -266,7 +307,7 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
 
   let leftY = detailsTop;
   const drawDetail = (label: string, value: string) => {
-    page.drawText(label, { x: leftX, y: leftY, size: 8, font: fontRegular, color: grey });
+    page.drawText(label, { x: leftX, y: leftY, size: 8, font: fontRegular, color: sageDark });
     page.drawText(value, { x: leftX + labelGap, y: leftY, size: 10, font: fontBold, color: charcoal });
     leftY -= 18;
   };
@@ -277,7 +318,7 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
 
   if (safeMessage) {
     leftY -= 4;
-    page.drawText('Message:', { x: leftX, y: leftY, size: 8, font: fontRegular, color: grey });
+    page.drawText('Message:', { x: leftX, y: leftY, size: 8, font: fontRegular, color: sageDark });
     leftY -= 12;
 
     const maxMsgW = rightX - leftX - 20;
@@ -291,12 +332,12 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
       if (fontRegular.widthOfTextAtSize(test, 9) > maxMsgW) {
         if (currentLine) {
           if (printed >= maxLines) {
-            page.drawText(`${currentLine}...`, { x: leftX, y: leftY, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3) });
+            page.drawText(`${currentLine}...`, { x: leftX, y: leftY, size: 9, font: fontRegular, color: grey });
             printed += 1;
             currentLine = '';
             break;
           }
-          page.drawText(currentLine, { x: leftX, y: leftY, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3) });
+          page.drawText(currentLine, { x: leftX, y: leftY, size: 9, font: fontRegular, color: grey });
           leftY -= 12;
           printed += 1;
         }
@@ -307,34 +348,34 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
     }
 
     if (currentLine && printed < maxLines) {
-      page.drawText(currentLine, { x: leftX, y: leftY, size: 9, font: fontRegular, color: rgb(0.3, 0.3, 0.3) });
+      page.drawText(currentLine, { x: leftX, y: leftY, size: 9, font: fontRegular, color: grey });
     }
   }
 
   // Right column: voucher code + QR
-  const codeBoxH = 30;
+  const codeBoxH = 32;
   const codeBoxTop = detailsTop;
   page.drawRectangle({
     x: rightX,
     y: codeBoxTop - codeBoxH,
     width: rightW,
     height: codeBoxH,
-    color: charcoal,
+    color: sageDark,
   });
 
   page.drawText('Voucher Code', {
     x: rightX + 8,
-    y: codeBoxTop - 8,
+    y: codeBoxTop - 9,
     size: 8,
     font: fontRegular,
-    color: sage,
+    color: cream,
   });
 
   const codeText = giftCard.code || '';
   const codeW = fontBold.widthOfTextAtSize(codeText, 11);
   page.drawText(codeText, {
     x: rightX + (rightW - codeW) / 2,
-    y: codeBoxTop - 22,
+    y: codeBoxTop - 23,
     size: 11,
     font: fontBold,
     color: white,
@@ -344,8 +385,8 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
   if (qrBytes) {
     try {
       const qrImage = await pdfDoc.embedPng(qrBytes);
-      const qrSize = 44;
-      const qrY = codeBoxTop - codeBoxH - 54;
+      const qrSize = 46;
+      const qrY = codeBoxTop - codeBoxH - 56;
       page.drawImage(qrImage, {
         x: rightX + (rightW - qrSize) / 2,
         y: qrY,
@@ -359,7 +400,7 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
         y: qrY - 8,
         size: 6,
         font: fontRegular,
-        color: charcoal,
+        color: sageDark,
       });
     } catch (e) {
       console.error('Failed to embed QR code:', e);
@@ -397,11 +438,11 @@ export async function buildVoucherPDF(giftCard: VoucherGiftCard): Promise<Uint8A
   const urlText = 'www.pitterpotter.co.uk';
   const urlW = fontBold.widthOfTextAtSize(urlText, 7);
   page.drawText(urlText, {
-    x: width - margin - urlW - 12,
+    x: width - margin - contentPad - urlW - 4,
     y: footerTop - 44,
     size: 7,
     font: fontBold,
-    color: sage,
+    color: cream,
   });
 
   return await pdfDoc.save();

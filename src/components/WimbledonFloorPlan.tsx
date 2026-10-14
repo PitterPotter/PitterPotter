@@ -43,6 +43,7 @@ export interface WimbledonFloorPlanProps {
   highlightTableId?: string;
   onAssign?: (tableId: string) => void;
   onMoveBooking?: (bookingId: string, tableId: string) => void;
+  onSeatBooking?: (bookingId: string) => void;
   readOnly?: boolean;
   showTablePanel?: boolean;
   onTableClick?: (tableId: string) => void;
@@ -280,6 +281,7 @@ export default function WimbledonFloorPlan({
   highlightTableId,
   onAssign,
   onMoveBooking,
+  onSeatBooking,
   readOnly = false,
   showTablePanel = true,
   onTableClick,
@@ -288,6 +290,7 @@ export default function WimbledonFloorPlan({
   const [dragTarget, setDragTarget] = useState<string | null>(null);
   const [pendingAssignId, setPendingAssignId] = useState<string | null>(null);
   const [pendingTables, setPendingTables] = useState<string[]>([]);
+  const [showSeated, setShowSeated] = useState(false);
   const [blockedTables, setBlockedTables] = useState<BlockedTable[]>([]);
   const [blockReason, setBlockReason] = useState('');
   const [showBlockInput, setShowBlockInput] = useState(false);
@@ -316,7 +319,7 @@ export default function WimbledonFloorPlan({
 
   const unassignedBookings = useMemo(() => {
     if (!selectedDate) return [];
-    return bookings.filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && !b.tableId && b.status !== 'cancelled' && b.status !== 'no_show');
+    return bookings.filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && !b.tableId && (b.status === 'pending' || b.status === 'confirmed'));
   }, [bookings, selectedDate]);
 
   const blockedIdsForDate = useMemo(() => {
@@ -382,27 +385,44 @@ export default function WimbledonFloorPlan({
     setBlockedTables(next);
   };
 
+  // Sidebar shows only bookings still waiting to be seated — seated and
+  // completed parties drop out of the list like the dashboard columns.
   const bookingLegend = useMemo(() => {
     return bookings
-      .filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && b.status !== 'cancelled' && b.status !== 'no_show' && (!selectedTime || (b.time && overlapsTwoHours(b.time, selectedTime))))
+      .filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && (b.status === 'pending' || b.status === 'confirmed') && (!selectedTime || (b.time && overlapsTwoHours(b.time, selectedTime))))
       .sort(byTimeThenName)
       .map(b => ({ id: b.id, name: firstName(b.name), painters: b.paintersCount, time: b.time, tableId: b.tableId }));
   }, [bookings, selectedDate, selectedTime]);
 
+  const seatedLegend = useMemo(() => {
+    return bookings
+      .filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && b.status === 'seated')
+      .sort(byTimeThenName)
+      .map(b => ({ id: b.id, name: firstName(b.name), painters: b.paintersCount, time: b.time, tableId: b.tableId }));
+  }, [bookings, selectedDate]);
+
   // Dropping appends the table to the booking's set (drag onto T5 then T6
-  // gives "T5, T6") and keeps pending mode open for further drops.
+  // gives "T5, T6") and keeps pending mode open for further drops. On
+  // today's plan a drop also seats the booking — it's the "they arrived"
+  // gesture; for future dates it only assigns, so tomorrow's plan can be
+  // laid out without marking people as arrived.
   const handleDrop = (tid: string) => (e: React.DragEvent) => {
     e.preventDefault();
     const bookingId = e.dataTransfer.getData('text/plain');
-    if (bookingId && onMoveBooking) {
+    const booking = bookings.find(b => b.id === bookingId);
+    if (bookingId && booking && onMoveBooking) {
       const base = pendingAssignId === bookingId
         ? pendingTables
-        : parseTables(bookings.find(b => b.id === bookingId)?.tableId);
+        : parseTables(booking.tableId);
       if (!base.includes(tid)) {
         const next = [...base, tid];
         onMoveBooking(bookingId, next.join(', '));
         setPendingAssignId(bookingId);
         setPendingTables(next);
+      }
+      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      if (onSeatBooking && isToday && (booking.status === 'pending' || booking.status === 'confirmed')) {
+        onSeatBooking(bookingId);
       }
     }
     setDragTarget(null);
@@ -571,16 +591,25 @@ export default function WimbledonFloorPlan({
               {bookingLegend.map((b, i) => (
                 <div
                   key={i}
-                  className={`w-full px-2 py-1.5 rounded-md text-[11px] font-semibold text-[#1B2D3C] ${pendingAssignId === b.id ? 'bg-emerald-100' : 'hover:bg-[#1B2D3C]/5'} ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
+                  className={`w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-md text-[11px] font-semibold text-[#1B2D3C] ${pendingAssignId === b.id ? 'bg-emerald-100' : 'hover:bg-[#1B2D3C]/5'} ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
                   draggable={!!onMoveBooking}
                   onDragStart={onMoveBooking ? (e) => e.dataTransfer.setData('text/plain', b.id) : undefined}
                   onClick={() => {
                     if (onMoveBooking) { togglePending(b.id, b.tableId); return; }
                     const t = (b.tableId ?? '').split(',')[0]?.trim(); if (t) setLocalSelected(t);
                   }}
-                  title={onMoveBooking ? "Click to assign tables · drag onto tables to add" : "Click to locate its table"}
+                  title={onMoveBooking ? "Click to assign tables · drag onto a table to seat them there" : "Click to locate its table"}
                 >
-                  {shortTime(b.time)} {b.name} {b.painters}p{b.tableId ? ` – ${b.tableId}` : ''}
+                  <span className="truncate">{shortTime(b.time)} {b.name} {b.painters}p{b.tableId ? ` – ${b.tableId}` : ''}</span>
+                  {onSeatBooking && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onSeatBooking(b.id); }}
+                      className="shrink-0 px-1.5 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-black uppercase tracking-wider cursor-pointer"
+                      title="Mark as seated at the assigned table"
+                    >
+                      Seat
+                    </button>
+                  )}
                 </div>
               ))}
             </>
@@ -590,6 +619,29 @@ export default function WimbledonFloorPlan({
               <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-yellow-100 border border-yellow-600 rounded-sm shrink-0" /><span>Has bookings</span></div>
               <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-red-500 border border-red-700 rounded-sm shrink-0" /><span>Selected slot taken</span></div>
               <div className="flex items-center gap-1.5"><div className="w-4 h-3 bg-gray-500 border border-gray-700 rounded-sm shrink-0" /><span>Blocked</span></div>
+            </div>
+          )}
+          {/* Seated parties — collapsed so they don't clutter the waiting list */}
+          {seatedLegend.length > 0 && (
+            <div className="pt-1 border-t border-[#1B2D3C]/10">
+              <button
+                onClick={() => setShowSeated(s => !s)}
+                className="w-full text-left text-[9px] font-bold uppercase tracking-wider text-[#1B2D3C]/45 px-0.5 cursor-pointer"
+              >
+                Seated · {seatedLegend.length} {showSeated ? '▾' : '▸'}
+              </button>
+              {showSeated && seatedLegend.map((b, i) => (
+                <div
+                  key={`s${i}`}
+                  className={`w-full px-2 py-1 rounded-md text-[11px] font-semibold text-[#1B2D3C]/45 ${pendingAssignId === b.id ? 'bg-emerald-100' : ''} ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
+                  draggable={!!onMoveBooking}
+                  onDragStart={onMoveBooking ? (e) => e.dataTransfer.setData('text/plain', b.id) : undefined}
+                  onClick={() => { const t = (b.tableId ?? '').split(',')[0]?.trim(); if (t) setLocalSelected(t); }}
+                  title={onMoveBooking ? "Drag onto a table to move them" : "Click to locate its table"}
+                >
+                  {shortTime(b.time)} {b.name} {b.painters}p{b.tableId ? ` – ${b.tableId}` : ''}
+                </div>
+              ))}
             </div>
           )}
         </div>

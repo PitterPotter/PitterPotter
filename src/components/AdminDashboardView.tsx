@@ -3634,6 +3634,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   selectedDate={floorPlanDate}
                   readOnly
                   onMoveBooking={(bookingId, tableId) => updateBookingTable(bookingId, tableId)}
+                  onSeatBooking={canUpdateStatus ? (bookingId) => updateStatus(bookingId, 'seated') : undefined}
                 />
               ) : (
                 <PutneyFloorPlan
@@ -3641,6 +3642,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   selectedDate={floorPlanDate}
                   readOnly
                   onMoveBooking={(bookingId, tableId) => updateBookingTable(bookingId, tableId)}
+                  onSeatBooking={canUpdateStatus ? (bookingId) => updateStatus(bookingId, 'seated') : undefined}
                 />
               )}
             </div>

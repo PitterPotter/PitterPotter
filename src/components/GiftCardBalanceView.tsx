@@ -16,6 +16,8 @@ interface GiftCardResult {
   balance: number;
   status: 'active' | 'redeemed' | 'expired';
   expiryDate: string | null;
+  covers?: string;
+  recipientName?: string;
 }
 
 export default function GiftCardBalanceView({ setCurrentPage, adminMode = false }: GiftCardBalanceViewProps) {
@@ -68,6 +70,8 @@ export default function GiftCardBalanceView({ setCurrentPage, adminMode = false 
         balance: Number(data.balance),
         status: data.status,
         expiryDate: expiryDate ? expiryDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null,
+        covers: data.covers,
+        recipientName: data.recipientName,
       });
     } catch (err) {
       console.error('Balance check error:', err);
@@ -139,14 +143,29 @@ export default function GiftCardBalanceView({ setCurrentPage, adminMode = false 
               <span className="text-xs font-black uppercase tracking-wider text-[#1B2D3C]"><EditableText contentKey="giftcardbalance_code_label" page="gift-card-balance" defaultValue="Code" adminMode={adminMode} className="text-xs uppercase tracking-wider text-[#1B2D3C]" /></span>
               <code className="text-sm font-bold text-[#1B2D3C] tracking-wider">{result.code}</code>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black uppercase tracking-wider text-[#1B2D3C]"><EditableText contentKey="giftcardbalance_balance_label" page="gift-card-balance" defaultValue="Balance" adminMode={adminMode} className="text-xs uppercase tracking-wider text-[#1B2D3C]" /></span>
-              <span className="text-2xl font-black text-[#1B2D3C]">£{result.balance.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black uppercase tracking-wider text-[#1B2D3C]"><EditableText contentKey="giftcardbalance_original_label" page="gift-card-balance" defaultValue="Original Amount" adminMode={adminMode} className="text-xs uppercase tracking-wider text-[#1B2D3C]" /></span>
-              <span className="text-sm font-bold text-[#1B2D3C]">£{result.amount.toFixed(2)}</span>
-            </div>
+            {result.covers ? (
+              <div className="space-y-1">
+                <span className="block text-xs font-black uppercase tracking-wider text-[#1B2D3C]"><EditableText contentKey="giftcardbalance_covers_label" page="gift-card-balance" defaultValue="Voucher Covers" adminMode={adminMode} className="text-xs uppercase tracking-wider text-[#1B2D3C]" /></span>
+                <p className="text-base font-bold text-purple-700">{result.covers}</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-[#1B2D3C]"><EditableText contentKey="giftcardbalance_balance_label" page="gift-card-balance" defaultValue="Balance" adminMode={adminMode} className="text-xs uppercase tracking-wider text-[#1B2D3C]" /></span>
+                  <span className="text-2xl font-black text-[#1B2D3C]">£{result.balance.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-[#1B2D3C]"><EditableText contentKey="giftcardbalance_original_label" page="gift-card-balance" defaultValue="Original Amount" adminMode={adminMode} className="text-xs uppercase tracking-wider text-[#1B2D3C]" /></span>
+                  <span className="text-sm font-bold text-[#1B2D3C]">£{result.amount.toFixed(2)}</span>
+                </div>
+              </>
+            )}
+            {result.recipientName && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-[#1B2D3C]"><EditableText contentKey="giftcardbalance_recipient_label" page="gift-card-balance" defaultValue="Recipient" adminMode={adminMode} className="text-xs uppercase tracking-wider text-[#1B2D3C]" /></span>
+                <span className="text-sm font-bold text-[#1B2D3C]">{result.recipientName}</span>
+              </div>
+            )}
             {result.expiryDate && (
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black uppercase tracking-wider text-[#1B2D3C]"><EditableText contentKey="giftcardbalance_expires_label" page="gift-card-balance" defaultValue="Expires" adminMode={adminMode} className="text-xs uppercase tracking-wider text-[#1B2D3C]" /></span>

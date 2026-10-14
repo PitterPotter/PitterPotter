@@ -679,19 +679,26 @@ struct GiftCardScannerSheet: View {
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
                     .foregroundStyle(PPBrand.charcoal.opacity(0.6))
 
-                VStack(spacing: 6) {
-                    HStack(spacing: 16) {
-                        Label(String(format: "£%.2f", card.balance), systemImage: "sterlingsign.circle.fill")
-                            .font(AppFont.body(14, weight: .bold))
-                        Label(card.status.capitalized, systemImage: "tag.fill")
-                            .font(AppFont.body(12, weight: .bold))
+                VStack(spacing: 8) {
+                    if card.isActivityVoucher {
+                        Label(card.covers ?? "", systemImage: "heart.fill")
+                            .font(AppFont.body(13, weight: .bold))
+                            .foregroundStyle(.purple)
+                            .multilineTextAlignment(.center)
+                    } else {
+                        HStack(spacing: 16) {
+                            Label(String(format: "£%.2f", card.balance), systemImage: "sterlingsign.circle.fill")
+                                .font(AppFont.body(14, weight: .bold))
+                            Label(card.status.capitalized, systemImage: "tag.fill")
+                                .font(AppFont.body(12, weight: .bold))
+                        }
+                        .foregroundStyle(PPBrand.charcoal.opacity(0.7))
                     }
-                    .foregroundStyle(PPBrand.charcoal.opacity(0.7))
 
                     if let name = card.recipientName, !name.isEmpty {
                         Text(name)
-                            .font(AppFont.body(12, weight: .medium))
-                            .foregroundStyle(PPBrand.charcoal.opacity(0.5))
+                            .font(AppFont.body(13, weight: .semibold))
+                            .foregroundStyle(PPBrand.charcoal.opacity(0.6))
                     }
                 }
 
@@ -705,7 +712,7 @@ struct GiftCardScannerSheet: View {
                             } else {
                                 Image(systemName: "checkmark.circle.fill")
                             }
-                            Text("Mark as Redeemed")
+                            Text(card.isActivityVoucher ? "Mark as Used" : "Mark as Redeemed")
                         }
                         .font(AppFont.body(16, weight: .bold))
                         .frame(maxWidth: .infinity)

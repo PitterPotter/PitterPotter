@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
 
     const { data, error } = await supabase
       .from('gift_cards')
-      .select('code, amount, balance, status, expiry_date')
+      .select('code, amount, balance, status, expiry_date, covers, recipient_name')
       .eq('code', code.trim())
       .single();
 
@@ -60,12 +60,15 @@ Deno.serve(async (req) => {
     const expiryDate = data.expiry_date ? new Date(data.expiry_date) : null;
     const isExpired = expiryDate ? expiryDate < new Date() : false;
 
+    const coversText = typeof data.covers === 'string' ? data.covers.trim() : '';
     return new Response(JSON.stringify({
       code: data.code,
       amount: Number(data.amount),
       balance: Number(data.balance),
       status: isExpired ? 'expired' : data.status,
       expiryDate: data.expiry_date,
+      covers: coversText || undefined,
+      recipientName: data.recipient_name || undefined,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

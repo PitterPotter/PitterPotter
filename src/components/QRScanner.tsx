@@ -13,6 +13,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   const controlsRef = useRef<{ stop: () => void } | null>(null);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
+  const [manualCode, setManualCode] = useState('');
 
   const stop = useCallback(() => {
     if (controlsRef.current) {
@@ -94,6 +95,32 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
               </p>
             </>
           )}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <input
+            type="text"
+            value={manualCode}
+            onChange={(e) => setManualCode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && manualCode.trim()) {
+                stop();
+                onScan(manualCode.trim());
+              }
+            }}
+            placeholder="Or type the code manually…"
+            className="flex-1 px-3 py-2 bg-white/10 border border-white/30 text-white placeholder-white/50 text-sm rounded-lg focus:outline-none focus:border-white/60"
+          />
+          <button
+            onClick={() => {
+              if (manualCode.trim()) {
+                stop();
+                onScan(manualCode.trim());
+              }
+            }}
+            className="px-4 py-2 bg-white text-[#1B2D3C] text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-[#DBE7E4] transition-colors cursor-pointer"
+          >
+            Enter
+          </button>
         </div>
         <button
           onClick={() => { stop(); onClose(); }}

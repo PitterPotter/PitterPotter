@@ -349,12 +349,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'create') {
-      if (!isSuperAdmin) {
-        return new Response(JSON.stringify({ error: 'Forbidden' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
       const { amount, recipientName, recipientEmail, senderName, message, isPhysical, covers } = body;
       const coversText = typeof covers === 'string' ? covers.trim() : '';
       if (coversText) {
@@ -403,8 +397,9 @@ Deno.serve(async (req) => {
         entityId: giftCard.id,
       });
 
-      // Send email if recipient email is provided and not a physical card
-      if (!isPhysical && recipientEmail) {
+      // Send email whenever a recipient address is given — physical/in-store
+      // vouchers may also be emailed (e.g. customer paid via Clover in shop)
+      if (recipientEmail) {
         try {
           await fetch(`${supabaseUrl}/functions/v1/send-gift-card-email`, {
             method: 'POST',
@@ -575,6 +570,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'updateStatus') {
+      if (!isSuperAdmin) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       if (!isNonEmptyString(id) || !isOneOf(status, ['active', 'redeemed', 'expired', 'cancelled', 'disabled'] as const)) {
         return new Response(JSON.stringify({ error: 'Invalid id or status' }), {
           status: 400,
@@ -590,6 +591,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'unredeem') {
+      if (!isSuperAdmin) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       if (!isNonEmptyString(id)) {
         return new Response(JSON.stringify({ error: 'Missing id' }), {
           status: 400,

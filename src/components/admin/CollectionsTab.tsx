@@ -1,11 +1,10 @@
 import { useMemo, useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Search, Bell, Camera, Users, Clock, MapPin, Check, Package, Phone, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertCircle, CheckSquare, Square, Plus, QrCode, Tag, Zap, RotateCcw, MoreVertical } from 'lucide-react';
+import { Search, Bell, Camera, Users, Clock, MapPin, Check, Package, Phone, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertCircle, CheckSquare, Square, Plus, Tag, Zap, RotateCcw, MoreVertical } from 'lucide-react';
 import { BookingInquiry } from '../../types';
 import Skeleton from '../Skeleton';
 import ImageModal from '../ImageModal';
 import { compressImage } from '../../lib/imageCompression';
-import QRScanner from '../QRScanner';
 import TagPopover, { TAG_COLORS, TAG_LABELS, TAG_STATUSES, getTagColor } from './TagPopover';
 
 export type CollectionStage = 'painted' | 'ready' | 'collected';
@@ -15,9 +14,10 @@ interface CollectionsTabProps {
   bookings: BookingInquiry[];
   studioFilter: 'all' | 'Putney' | 'Wimbledon';
   onStudioFilterChange: (studio: 'all' | 'Putney' | 'Wimbledon') => void;
+  visibleStudios?: ('Putney' | 'Wimbledon')[];
   loading: boolean;
   canUpdate: boolean;
-  fixedStage: CollectionStage;
+  fixedStage: CollectionStage | 'all';
   onSetStage: (booking: BookingInquiry, stage: CollectionStage) => void;
   onOpenBooking: (booking: BookingInquiry) => void;
   onUploadPhotos: (booking: BookingInquiry, files: File[]) => void;
@@ -35,6 +35,8 @@ const STAGE_INFO: Record<CollectionStage, { label: string; empty: string; accent
   ready: { label: 'Ready to Collect', empty: 'Nothing ready to collect', accent: 'text-blue-800', badge: 'bg-blue-100 text-blue-800' },
   collected: { label: 'Collected', empty: 'Nothing collected yet', accent: 'text-emerald-800', badge: 'bg-emerald-100 text-emerald-800' },
 };
+
+const ALL_FILES_INFO = { label: 'All Files', empty: 'No completed bookings yet', accent: 'text-[#1B2D3C]', badge: 'bg-[#1B2D3C]/10 text-[#1B2D3C]' };
 
 export function resolveStage(booking: BookingInquiry): CollectionStageOrNull {
   if (booking.collectionStatus) return booking.collectionStatus;
@@ -57,9 +59,11 @@ function BookingCard({
   onRemovePhotoTag,
   onOpenImage,
   onSetPaintedFlag,
+  showStageBadge,
 }: {
   booking: BookingInquiry;
   stage: CollectionStage;
+  showStageBadge?: boolean;
   canUpdate: boolean;
   onSetStage: (booking: BookingInquiry, stage: CollectionStage) => void;
   onOpenBooking: (booking: BookingInquiry) => void;
@@ -131,6 +135,11 @@ function BookingCard({
               </button>
             )}
             <p className="text-sm font-black text-[#1B2D3C] truncate">{booking.name}</p>
+            {showStageBadge && (
+              <span className={`shrink-0 px-1.5 py-0.5 text-[8px] font-black rounded uppercase tracking-wider ${STAGE_INFO[stage].badge}`}>
+                {STAGE_INFO[stage].label}
+              </span>
+            )}
             {booking.paintedFlag === 'rush' && (
               <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-wider rounded-full">
                 <Zap className="w-2.5 h-2.5" /> Rush
@@ -380,6 +389,7 @@ export default function CollectionsTab({
   onBulkAddPhotoTag,
   onCreateProfile,
   onSetPaintedFlag,
+  visibleStudios = ['Putney', 'Wimbledon'],
 }: CollectionsTabProps) {
   const [nameQuery, setNameQuery] = useState('');
   const [phoneQuery, setPhoneQuery] = useState('');
@@ -399,13 +409,9 @@ export default function CollectionsTab({
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
   const [profileDate, setProfileDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [profileStudio, setProfileStudio] = useState<'Putney' | 'Wimbledon'>('Putney');
+  const [profileStudio, setProfileStudio] = useState<'Putney' | 'Wimbledon'>(() => studioFilter !== 'all' ? studioFilter : visibleStudios[0]);
   const [profilePhotos, setProfilePhotos] = useState<string[]>([]);
   const [profileSaving, setProfileSaving] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
-  const [scanResult, setScanResult] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
-  const [scannedBooking, setScannedBooking] = useState<BookingInquiry | null>(null);
-  const [collecting, setCollecting] = useState(false);
   const [showBulkTag, setShowBulkTag] = useState(false);
   const [bulkTagStatus, setBulkTagStatus] = useState('painted');
   const [bulkTagLabel, setBulkTagLabel] = useState('');
@@ -426,7 +432,7 @@ export default function CollectionsTab({
     const name = nameQuery.trim().toLowerCase();
     const phone = phoneQuery.replace(/\D/g, '');
     return eligible.filter(b => {
-      if (resolveStage(b) !== fixedStage) return false;
+      if (fixedStage !== 'all' && resolveStage(b) !== fixedStage) return false;
       if (name && !b.name.toLowerCase().includes(name)) return false;
       if (phone && !(b.phone ?? '').replace(/\D/g, '').includes(phone)) return false;
       if (dateQuery && b.date !== dateQuery) return false;
@@ -503,61 +509,16 @@ export default function CollectionsTab({
     setNeedsPhotoOnly(false);
   };
 
-  const handleQRScan = (code: string) => {
-    let token: string | null = null;
-    try {
-      const url = new URL(code);
-      token = url.searchParams.get('token');
-    } catch {
-      if (code.startsWith('token=')) {
-        token = code.substring(6);
-      } else {
-        token = code;
-      }
-    }
-
-    if (!token) {
-      setScanResult({ type: 'error', message: 'Invalid QR code — no token found' });
-      return;
-    }
-
-    const booking = bookings.find(b => b.managementToken === token);
-    if (!booking) {
-      setScanResult({ type: 'error', message: 'No booking found for this QR code' });
-      return;
-    }
-
-    if (booking.status !== 'completed') {
-      setScanResult({ type: 'error', message: `${booking.name} is not completed (status: ${booking.status})` });
-      return;
-    }
-
-    const stage = resolveStage(booking);
-    if (stage === 'collected') {
-      setScanResult({ type: 'warning', message: `${booking.name} is already collected` });
-      return;
-    }
-    setScannedBooking(booking);
-    setScanResult({ type: 'success', message: `${booking.name} found — verify photos and mark collected` });
-  };
-
-  const handleMarkCollected = async () => {
-    if (!scannedBooking) return;
-    setCollecting(true);
-    await onSetStage(scannedBooking, 'collected');
-    setCollecting(false);
-    setScannedBooking(null);
-  };
-
   const isSearching = Boolean(nameQuery.trim() || phoneQuery.trim());
 
-  const info = STAGE_INFO[fixedStage];
+  const info = fixedStage === 'all' ? ALL_FILES_INFO : STAGE_INFO[fixedStage];
 
   const renderCard = (b: BookingInquiry) => (
     <BookingCard
       key={b.id}
       booking={b}
-      stage={fixedStage}
+      stage={resolveStage(b) ?? 'painted'}
+      showStageBadge={fixedStage === 'all'}
       canUpdate={canUpdate}
       onSetStage={onSetStage}
       onOpenBooking={onOpenBooking}
@@ -681,20 +642,22 @@ export default function CollectionsTab({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Studio filter */}
-          <div className="flex rounded-lg border border-[#1B2D3C]/15 overflow-hidden">
-            {(['all', 'Putney', 'Wimbledon'] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => onStudioFilterChange(s)}
-                className={`px-2.5 py-1.5 text-[10px] font-bold transition-all cursor-pointer ${
-                  studioFilter === s ? 'bg-[#DBE7E4] text-[#1B2D3C]' : 'bg-white text-[#1B2D3C]/50 hover:text-[#1B2D3C]'
-                }`}
-              >
-                {s === 'all' ? 'All Studios' : s}
-              </button>
-            ))}
-          </div>
+          {/* Studio filter — only when staff can see more than one studio */}
+          {visibleStudios.length > 1 && (
+            <div className="flex rounded-lg border border-[#1B2D3C]/15 overflow-hidden">
+              {(['all', ...visibleStudios] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => onStudioFilterChange(s)}
+                  className={`px-2.5 py-1.5 text-[10px] font-bold transition-all cursor-pointer ${
+                    studioFilter === s ? 'bg-[#DBE7E4] text-[#1B2D3C]' : 'bg-white text-[#1B2D3C]/50 hover:text-[#1B2D3C]'
+                  }`}
+                >
+                  {s === 'all' ? 'All Studios' : s}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Needs photo toggle (painted only) */}
           {fixedStage === 'painted' && (
@@ -717,16 +680,6 @@ export default function CollectionsTab({
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-[#1B2D3C] text-white hover:bg-[#1B2D3C]/90 transition-all cursor-pointer"
             >
               <Plus className="w-3 h-3" /> Add Profile
-            </button>
-          )}
-
-          {/* QR Scanner button */}
-          {canUpdate && (
-            <button
-              onClick={() => { setShowScanner(true); setScanResult(null); }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-[#DBE7E4] text-[#1B2D3C] hover:bg-[#D6E2E9] transition-all cursor-pointer"
-            >
-              <QrCode className="w-3 h-3" /> Scan QR
             </button>
           )}
 
@@ -1044,17 +997,18 @@ export default function CollectionsTab({
                     className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Studio</label>
-                  <select
-                    value={profileStudio}
-                    onChange={(e) => setProfileStudio(e.target.value as 'Putney' | 'Wimbledon')}
-                    className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20"
-                  >
-                    <option value="Putney">Putney</option>
-                    <option value="Wimbledon">Wimbledon</option>
-                  </select>
-                </div>
+                {visibleStudios.length > 1 && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Studio</label>
+                    <select
+                      value={profileStudio}
+                      onChange={(e) => setProfileStudio(e.target.value as 'Putney' | 'Wimbledon')}
+                      className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20"
+                    >
+                      {visibleStudios.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Photos</label>
@@ -1128,112 +1082,6 @@ export default function CollectionsTab({
         </div>
       )}
 
-      {/* Scan result toast */}
-      {scanResult && !scannedBooking && (
-        <div
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-lg shadow-lg text-xs font-bold uppercase tracking-wider cursor-pointer ${
-            scanResult.type === 'success'
-              ? 'bg-emerald-500 text-white'
-              : scanResult.type === 'warning'
-              ? 'bg-amber-500 text-white'
-              : 'bg-red-500 text-white'
-          }`}
-          onClick={() => setScanResult(null)}
-        >
-          {scanResult.message}
-        </div>
-      )}
-
-      {/* Scanned booking card with Mark as Collected */}
-      {scannedBooking && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setScannedBooking(null); setScanResult(null); }}>
-          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-[#1B2D3C]/10">
-              <div>
-                <p className="text-sm font-black text-[#1B2D3C]">{scannedBooking.name}</p>
-                <p className="text-[10px] font-semibold text-[#1B2D3C]/60">
-                  {scannedBooking.studio} • {scannedBooking.date} at {scannedBooking.time}
-                </p>
-              </div>
-              <button
-                onClick={() => { setScannedBooking(null); setScanResult(null); }}
-                className="text-[#1B2D3C]/40 hover:text-[#1B2D3C] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {scannedBooking.photos && scannedBooking.photos.length > 0 ? (
-              <div className="p-4">
-                <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto">
-                  {scannedBooking.photos.map((url, i) => {
-                    const tags = scannedBooking.photoTags?.[i] || [];
-                    return (
-                      <div
-                        key={i}
-                        className="relative rounded-lg overflow-hidden border border-[#1B2D3C]/15 cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => { setModalImages(scannedBooking.photos!); setModalIndex(i); setModalPhotoTags(scannedBooking.photoTags); }}
-                      >
-                        <img src={url} alt={`Photo ${i + 1}`} className="w-full max-h-48 object-contain bg-[#F8FAFA]" />
-                        {tags.map((t, ti) => (
-                          <div
-                            key={ti}
-                            className="absolute flex items-center gap-0.5"
-                            style={{ left: `${t.x}%`, top: `${t.y}%`, transform: 'translate(-50%, -50%)' }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span
-                              className={`px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-full whitespace-nowrap shadow-md ${getTagColor(t.status)}`}
-                            >
-                              {t.label ? `${TAG_LABELS[t.status] || t.status} - ${t.label}` : (TAG_LABELS[t.status] || t.status)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="p-8 text-center">
-                <Camera className="w-8 h-8 text-[#1B2D3C]/20 mx-auto mb-2" />
-                <p className="text-xs font-semibold text-[#1B2D3C]/50">No photos on file</p>
-              </div>
-            )}
-
-            <div className="p-4 border-t border-[#1B2D3C]/10 flex items-center gap-2">
-              <button
-                onClick={() => { onOpenBooking(scannedBooking); setScannedBooking(null); setScanResult(null); }}
-                className="flex-1 px-3 py-2.5 bg-[#DBE7E4] text-[#1B2D3C] text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-[#D6E2E9] transition-colors cursor-pointer"
-              >
-                View Details
-              </button>
-              <button
-                onClick={handleMarkCollected}
-                disabled={collecting}
-                className="flex-1 px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
-              >
-                {collecting ? (
-                  <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Marking...</>
-                ) : (
-                  <><Check className="w-3.5 h-3.5" /> Mark Collected</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* QR Scanner modal */}
-      {showScanner && (
-        <QRScanner
-          onScan={(code) => {
-            setShowScanner(false);
-            handleQRScan(code);
-          }}
-          onClose={() => setShowScanner(false)}
-        />
-      )}
     </div>
   );
 }

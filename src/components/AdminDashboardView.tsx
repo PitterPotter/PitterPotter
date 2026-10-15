@@ -25,7 +25,7 @@ import AuditLogsTab from './admin/AuditLogsTab';
 import EmailLogsTab from './admin/EmailLogsTab';
 import EmailTemplatesTab from './admin/EmailTemplatesTab';
 import WebmasterTab from './admin/WebmasterTab';
-import CollectionsTab, { CollectionStage } from './admin/CollectionsTab';
+import CollectionsTab, { CollectionStage, resolveStage } from './admin/CollectionsTab';
 import TagPopover, { TAG_COLORS, TAG_LABELS, getTagColor } from './admin/TagPopover';
 import DashboardSummary from './admin/DashboardSummary';
 import SMSAdminTab from './admin/SMSAdminTab';
@@ -87,7 +87,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [inquiries, setInquiries] = useState<BookingInquiry[]>([]);
   const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'gift-cards' | 'floor-plan' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation'>(staff.role === 'super_admin' ? 'dashboard' : 'bookings');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'gift-cards' | 'floor-plan' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation'>(staff.role === 'super_admin' ? 'dashboard' : 'bookings');
   const [floorPlanStudio, setFloorPlanStudio] = useState<'Putney' | 'Wimbledon'>(staff.allowedStudios?.[0] === 'Putney' ? 'Putney' : 'Wimbledon');
   const [floorPlanDate, setFloorPlanDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
@@ -117,7 +117,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [newClosedStudio, setNewClosedStudio] = useState<'Putney' | 'Wimbledon' | 'Both'>('Both');
   const [showGiftCardModal, setShowGiftCardModal] = useState(false);
   const [newGiftCard, setNewGiftCard] = useState({
-    amount: 50,
+    amount: '50',
     recipientName: '',
     recipientEmail: '',
     senderName: '',
@@ -136,6 +136,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [redeemResult, setRedeemResult] = useState<{ discount: number; balance: number; status: string } | null>(null);
   const [redeemError, setRedeemError] = useState('');
   const [adminScanning, setAdminScanning] = useState(false);
+  const [unifiedScanning, setUnifiedScanning] = useState(false);
+  const [scanCollectTarget, setScanCollectTarget] = useState<BookingInquiry | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [emailLogsLoading, setEmailLogsLoading] = useState(false);
@@ -391,7 +393,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     if (activeTab !== 'dashboard' && activeTab !== 'bookings' && activeTab !== 'gift-cards' && activeTab !== 'floor-plan') return;
     const refresh = async () => {
       if (activeTab === 'dashboard' || activeTab === 'bookings' || activeTab === 'floor-plan') await loadInquiries();
-      if (activeTab === 'gift-cards') await loadGiftCards();
+      if (activeTab === 'gift-cards' && isSuperAdmin) await loadGiftCards();
       setLastUpdated(new Date());
     };
     refresh();
@@ -1126,7 +1128,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const exportCollectionStats = () => exportCollectionStatsCSVUtil(inquiries);
 
   const createGiftCardCheckout = async () => {
-    if (!newGiftCard.amount || newGiftCard.amount <= 0) {
+    const amountNum = Number(newGiftCard.amount);
+    if (!isFinite(amountNum) || amountNum <= 0) {
       showToast('Please enter a valid amount', 'error');
       return;
     }
@@ -1139,7 +1142,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          amount: newGiftCard.amount,
+          amount: amountNum,
           recipientName: newGiftCard.recipientName,
           recipientEmail: newGiftCard.recipientEmail,
           senderName: newGiftCard.senderName,
@@ -1350,7 +1353,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       showToast('Please enter what the voucher covers', 'error');
       return;
     }
-    if (!isActivity && (!newGiftCard.amount || newGiftCard.amount <= 0)) {
+    const amountNum = Number(newGiftCard.amount);
+    if (!isActivity && (!isFinite(amountNum) || amountNum <= 0)) {
       showToast('Please enter a valid amount', 'error');
       return;
     }
@@ -1363,10 +1367,10 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           action: 'create',
           username: staff.username,
           sessionToken: staff.sessionToken,
-          amount: isActivity ? 0 : newGiftCard.amount,
+          amount: isActivity ? 0 : amountNum,
           covers: isActivity ? newGiftCard.covers.trim() : '',
           recipientName: newGiftCard.recipientName,
-          recipientEmail: giftCardIsPhysical ? '' : newGiftCard.recipientEmail,
+          recipientEmail: newGiftCard.recipientEmail,
           senderName: newGiftCard.senderName || 'In-store',
           message: newGiftCard.message,
           isPhysical: giftCardIsPhysical || isActivity && !newGiftCard.recipientEmail,
@@ -1376,7 +1380,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       if (!response.ok || data.error) throw new Error(data.error || 'Failed to create gift card');
       showToast(`${isActivity ? 'Activity voucher' : 'Gift card'} ${data.code} created${giftCardIsPhysical ? ' (physical)' : ''}`, 'success');
       setShowGiftCardModal(false);
-      setNewGiftCard({ amount: 50, recipientName: '', recipientEmail: '', senderName: '', message: '', covers: '' });
+      setNewGiftCard({ amount: '50', recipientName: '', recipientEmail: '', senderName: '', message: '', covers: '' });
       setGiftCardKind('amount');
       setGiftCardIsPhysical(false);
       loadGiftCards();
@@ -1400,6 +1404,32 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const handleAdminScan = (scannedCode: string) => {
     setRedeemCode(scannedCode);
     setAdminScanning(false);
+    checkRedeemBalance(scannedCode);
+  };
+
+  // Unified scanner: collection QRs carry a booking token, gift voucher QRs
+  // carry the raw voucher code — route by content.
+  const handleUnifiedScan = (scannedCode: string) => {
+    let token: string | null = null;
+    try {
+      token = new URL(scannedCode).searchParams.get('token');
+    } catch {
+      if (scannedCode.startsWith('token=')) token = scannedCode.substring(6);
+    }
+
+    if (token) {
+      setUnifiedScanning(false);
+      const booking = inquiries.find(b => b.managementToken === token);
+      if (!booking) { showToast('No booking found for this QR code', 'error'); return; }
+      if (resolveStage(booking) === 'collected') { showToast(`${booking.name} is already collected`, 'error'); return; }
+      if (booking.status !== 'completed') { showToast(`${booking.name} is not completed (status: ${booking.status})`, 'error'); return; }
+      setScanCollectTarget(booking);
+      return;
+    }
+
+    // Not a collection QR — try it as a gift voucher code
+    setUnifiedScanning(false);
+    openRedeemModal(scannedCode);
     checkRedeemBalance(scannedCode);
   };
 
@@ -2892,44 +2922,25 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8">
         {/* Admin Tabs — Grouped Navigation */}
         <div className="sticky top-[56px] z-30 bg-white border-b border-[#1B2D3C]/10 mb-6">
+          {/* Row 1 — daily workflow */}
           <div className="flex items-center gap-1 scrollbar-hide">
-            {/* Main tabs */}
             {[
               ...(isSuperAdmin ? [{ value: 'dashboard', label: 'Dashboard', badge: stats.pending > 0 ? stats.pending : null }] : []),
               { value: 'bookings', label: isSuperAdmin ? 'Bookings' : 'Dashboard', badge: isSuperAdmin ? null : (stats.pending > 0 ? stats.pending : null) },
               { value: 'painted', label: 'Painted', badge: stats.paintedNoPhoto > 0 ? stats.paintedNoPhoto : null },
               { value: 'ready', label: 'Ready', badge: null },
               { value: 'collected', label: 'Collected', badge: null },
-              ...(isSuperAdmin ? [{ value: 'gift-cards', label: 'Gift Vouchers', badge: null }] : []),
-              { value: 'floor-plan', label: 'Floor Plan', badge: null },
+              { value: 'all-files', label: 'All Files', badge: null },
               ...(isSuperAdmin ? [{ value: 'sms', label: 'SMS', badge: null }] : []),
             ].map((tab) => (
-              <button
+              <NavTab
                 key={tab.value}
-                onClick={() => setActiveTab(tab.value as typeof activeTab)}
-                className={`relative shrink-0 px-4 py-3 text-xs font-bold tracking-wide border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
-                  activeTab === tab.value
-                    ? 'border-[#1B2D3C] text-[#1B2D3C]'
-                    : 'border-transparent text-[#1B2D3C]/50 hover:text-[#1B2D3C]'
-                }`}
-              >
-                {tab.label}
-                {tab.badge !== null && tab.badge !== undefined && (
-                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[9px] font-black bg-red-500 text-white rounded-full">
-                    {tab.badge > 99 ? '99+' : tab.badge}
-                  </span>
-                )}
-              </button>
+                label={tab.label}
+                badge={tab.badge}
+                active={activeTab === tab.value}
+                onSelect={() => setActiveTab(tab.value as typeof activeTab)}
+              />
             ))}
-
-            {/* Redeem Card — opens the scanner/redeem modal, styled like a tab */}
-            <button
-              onClick={() => openRedeemModal(undefined, true)}
-              className="relative shrink-0 px-4 py-3 text-xs font-bold tracking-wide border-b-2 border-transparent text-[#1B2D3C]/50 hover:text-[#1B2D3C] transition-all cursor-pointer flex items-center gap-2"
-              title="Scan QR code to redeem gift card"
-            >
-              <ScanLine className="w-3.5 h-3.5" /> Redeem Card
-            </button>
 
             {/* Logs dropdown */}
             {canManageStaff && (
@@ -2948,6 +2959,31 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 isSuperAdmin={isSuperAdmin}
               />
             )}
+          </div>
+
+          {/* Row 2 — tools */}
+          <div className="flex items-center gap-1 scrollbar-hide border-t border-[#1B2D3C]/5">
+            {[
+              { value: 'gift-cards', label: 'Gift Vouchers', badge: null },
+              { value: 'floor-plan', label: 'Floor Plan', badge: null },
+            ].map((tab) => (
+              <NavTab
+                key={tab.value}
+                label={tab.label}
+                badge={tab.badge}
+                active={activeTab === tab.value}
+                onSelect={() => setActiveTab(tab.value as typeof activeTab)}
+              />
+            ))}
+
+            {/* Scan QR — unified scanner: collection QRs mark collected, voucher QRs open redeem */}
+            <button
+              onClick={() => setUnifiedScanning(true)}
+              className="relative shrink-0 px-4 py-2.5 text-xs font-bold tracking-wide text-[#1B2D3C]/50 hover:text-[#1B2D3C] transition-all cursor-pointer flex items-center gap-2"
+              title="Scan a collection QR or gift voucher QR"
+            >
+              <ScanLine className="w-3.5 h-3.5" /> Scan QR
+            </button>
           </div>
         </div>
 
@@ -2986,7 +3022,36 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
         )}
 
 
-        {activeTab === 'gift-cards' && (
+        {activeTab === 'gift-cards' && !isSuperAdmin && (
+          <div className="bg-white p-6 border border-[#1B2D3C]/20 shadow-sm mb-8">
+            <h2 className="font-heading text-lg font-black text-[#1B2D3C] uppercase tracking-wider mb-1">Gift Vouchers</h2>
+            <p className="text-xs font-semibold text-[#1B2D3C]/60 mb-5">
+              Create a voucher for an in-store purchase or a goodwill replacement, or redeem/check a customer's voucher.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setShowGiftCardModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#DBE7E4] text-[#1B2D3C] text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-[#D6E2E9] transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Create Gift Voucher
+              </button>
+              <button
+                onClick={() => openRedeemModal()}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#1B2D3C] text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-[#243B53] transition-all cursor-pointer"
+              >
+                <Gift className="w-4 h-4" /> Redeem / Check Balance
+              </button>
+              <button
+                onClick={() => setUnifiedScanning(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#1B2D3C] text-xs font-bold uppercase tracking-wider rounded-lg border border-[#1B2D3C]/20 hover:bg-[#D6E2E9] transition-all cursor-pointer"
+              >
+                <ScanLine className="w-4 h-4" /> Scan QR
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'gift-cards' && isSuperAdmin && (
           <div className="bg-white p-6 border border-[#1B2D3C]/20 shadow-sm mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading text-lg font-black text-[#1B2D3C] uppercase tracking-wider">Gift Cards</h2>
@@ -3235,6 +3300,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           canAddWalkIn={canAddWalkIn}
         />
 
+        {/* Full bookings list — super admin's "Bookings" tab only. Staff
+            ("Dashboard" tab) work calendar → day view and never use this. */}
+        {isSuperAdmin && (<>
         {/* Booking type tabs */}
         <div className="flex gap-2 mb-3 mt-6 sticky top-[104px] z-10 bg-[#FFFFFF] py-2">
           {([
@@ -3581,7 +3649,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                               className={`px-2 py-1 text-[10px] font-bold border transition-all cursor-pointer rounded-lg ${
                                 inq.tableId ? 'bg-[#DBE7E4] text-[#1B2D3C] border-[#1B2D3C] hover:bg-[#D6E2E9]' : 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100'
                               }`}>
-                              {inq.tableId ?? (inq.studio === 'Wimbledon' && inq.status !== 'cancelled' && inq.status !== 'no_show' ? '⚠ No table' : 'Assign')}
+                              {inq.source === 'block' && inq.tableId ? 'All tables' : (inq.tableId ?? (inq.studio === 'Wimbledon' && inq.status !== 'cancelled' && inq.status !== 'no_show' ? '⚠ No table' : 'Assign'))}
                             </button>
                           </td>
                         )}
@@ -3653,6 +3721,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             </div>
           )}
         </div>
+        </>)}
           </>
         )}
 
@@ -4963,11 +5032,14 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               <div>
                 <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Amount (£) *</label>
                 <input
-                  type="number"
-                  min="1"
-                  step="1"
+                  type="text"
+                  inputMode="decimal"
                   value={newGiftCard.amount}
-                  onChange={(e) => setNewGiftCard({ ...newGiftCard, amount: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || /^\d*\.?\d*$/.test(v)) setNewGiftCard({ ...newGiftCard, amount: v });
+                  }}
+                  placeholder="e.g. 50"
                   className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20"
                 />
               </div>
@@ -4982,13 +5054,12 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Recipient Email{giftCardIsPhysical && ' (skipped for physical)'}</label>
+                <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Recipient Email{giftCardIsPhysical && ' (optional — voucher is also emailed)'}</label>
                 <input
                   type="email"
                   value={newGiftCard.recipientEmail}
                   onChange={(e) => setNewGiftCard({ ...newGiftCard, recipientEmail: e.target.value })}
-                  disabled={giftCardIsPhysical}
-                  className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20 disabled:opacity-40"
+                  className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20"
                 />
               </div>
               <div>
@@ -5042,7 +5113,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       {showRedeemModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 sm:p-6">
           <div className="bg-white p-6 border border-[#1B2D3C]/20 max-w-md w-full space-y-4 shadow-lg max-h-[90vh] overflow-y-auto sm:rounded-xl">
-            <h3 className="font-heading text-xl font-black text-[#1B2D3C]">Redeem Gift Card</h3>
+            <h3 className="font-heading text-xl font-black text-[#1B2D3C]">Redeem Gift Voucher</h3>
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Gift Card Code</label>
@@ -5195,6 +5266,42 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           onScan={handleAdminScan}
           onClose={() => setAdminScanning(false)}
         />
+      )}
+
+      {/* Unified QR Scanner — collection tokens collect bookings, voucher codes open redeem */}
+      {unifiedScanning && (
+        <QRScanner
+          onScan={handleUnifiedScan}
+          onClose={() => setUnifiedScanning(false)}
+        />
+      )}
+
+      {/* Scanned collection confirm */}
+      {scanCollectTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 sm:p-6">
+          <div className="bg-white p-6 border border-[#1B2D3C]/20 max-w-sm w-full space-y-4 shadow-lg sm:rounded-xl">
+            <h3 className="font-heading text-lg font-black text-[#1B2D3C]">Collect Pottery</h3>
+            <div className="text-xs font-semibold text-[#1B2D3C]/70 space-y-1">
+              <p><span className="font-black text-[#1B2D3C]">{scanCollectTarget.name}</span> — {scanCollectTarget.studio}</p>
+              <p>{scanCollectTarget.date} · {scanCollectTarget.time} · {scanCollectTarget.paintersCount} painter{scanCollectTarget.paintersCount !== 1 ? 's' : ''}</p>
+              {resolveStage(scanCollectTarget) && <p className="uppercase tracking-wider text-[10px] font-bold">Stage: {resolveStage(scanCollectTarget)}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setScanCollectTarget(null)}
+                className="flex-1 px-4 py-2 bg-white text-[#1B2D3C] font-bold text-xs uppercase tracking-wider border border-[#1B2D3C]/20 hover:bg-[#D6E2E9] transition-all cursor-pointer rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { const b = scanCollectTarget; setScanCollectTarget(null); handleSetCollectionStage(b, 'collected'); }}
+                className="flex-1 px-4 py-2 bg-emerald-600 text-white font-bold text-xs uppercase tracking-wider hover:bg-emerald-700 transition-all cursor-pointer rounded-lg"
+              >
+                Mark Collected
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Capacity section — inside settings tab */}
@@ -6000,6 +6107,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           bookings={scopedInquiries}
           studioFilter={studioFilter}
           onStudioFilterChange={setStudioFilter}
+          visibleStudios={visibleStudios}
           loading={loading}
           canUpdate={canEdit}
           fixedStage="painted"
@@ -6020,6 +6128,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           bookings={scopedInquiries}
           studioFilter={studioFilter}
           onStudioFilterChange={setStudioFilter}
+          visibleStudios={visibleStudios}
           loading={loading}
           canUpdate={canEdit}
           fixedStage="ready"
@@ -6039,9 +6148,31 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           bookings={scopedInquiries}
           studioFilter={studioFilter}
           onStudioFilterChange={setStudioFilter}
+          visibleStudios={visibleStudios}
           loading={loading}
           canUpdate={canEdit}
           fixedStage="collected"
+          onSetStage={handleSetCollectionStage}
+          onOpenBooking={(booking) => setDrawerBooking(booking)}
+          onUploadPhotos={handleCollectionPhotoUpload}
+          uploadingId={collectionUploadingId}
+          onAddPhotoTag={handleAddPhotoTag}
+          onRemovePhotoTag={handleRemovePhotoTag}
+          onBulkAddPhotoTag={handleBulkAddPhotoTag}
+        />
+      )}
+
+      {/* All Files — every completed booking across painted/ready/collected,
+          searchable by name + phone for "is my pottery ready?" lookups */}
+      {activeTab === 'all-files' && (
+        <CollectionsTab
+          bookings={scopedInquiries}
+          studioFilter={studioFilter}
+          onStudioFilterChange={setStudioFilter}
+          visibleStudios={visibleStudios}
+          loading={loading}
+          canUpdate={canEdit}
+          fixedStage="all"
           onSetStage={handleSetCollectionStage}
           onOpenBooking={(booking) => setDrawerBooking(booking)}
           onUploadPhotos={handleCollectionPhotoUpload}
@@ -6576,7 +6707,37 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
 // --- Grouped Navigation Dropdowns ---
 
-type TabValue = 'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'gift-cards' | 'floor-plan' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation';
+type TabValue = 'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'gift-cards' | 'floor-plan' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation';
+
+function NavTab({
+  label,
+  badge,
+  active,
+  onSelect,
+}: {
+  label: string;
+  badge: number | null;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={`relative shrink-0 px-4 py-3 text-xs font-bold tracking-wide border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+        active
+          ? 'border-[#1B2D3C] text-[#1B2D3C]'
+          : 'border-transparent text-[#1B2D3C]/50 hover:text-[#1B2D3C]'
+      }`}
+    >
+      {label}
+      {badge !== null && badge !== undefined && (
+        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[9px] font-black bg-red-500 text-white rounded-full">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+    </button>
+  );
+}
 
 function NavDropdown({
   label,

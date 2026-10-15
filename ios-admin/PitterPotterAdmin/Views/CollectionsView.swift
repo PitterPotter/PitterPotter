@@ -16,11 +16,6 @@ struct CollectionsView: View {
     @State private var isUploading = false
     @State private var uploadError: String?
     @State private var showAddProfile = false
-    @State private var showScanner = false
-    @State private var scannedCode: String?
-    @State private var scanResult: String?
-    @State private var scanError: String?
-    @State private var scannedBooking: Booking?
     @State private var expandedDates: Set<String> = []
     @State private var expandedMonths: Set<String> = []
     @State private var showNoPhotoGroup = false
@@ -508,28 +503,10 @@ struct CollectionsView: View {
                     .environmentObject(authVM)
                     .environmentObject(bookingsVM)
             }
-            .sheet(isPresented: $showScanner) {
-                GiftCardScannerView(scannedCode: $scannedCode)
-                    .onDisappear {
-                        if let code = scannedCode {
-                            handleScannedCode(code)
-                        }
-                    }
-            }
-            .sheet(item: $scannedBooking) { booking in
-                ScanResultSheet(booking: booking)
-                    .environmentObject(authVM)
-                    .environmentObject(bookingsVM)
-            }
             .alert("Upload Error", isPresented: .constant(uploadError != nil)) {
                 Button("OK") { uploadError = nil }
             } message: {
                 Text(uploadError ?? "")
-            }
-            .alert("Scan Result", isPresented: .constant(scanError != nil)) {
-                Button("OK") { scanError = nil }
-            } message: {
-                Text(scanError ?? "")
             }
             .alert("Ready for Collection?", isPresented: $showingReadyPrompt) {
                 Button("Mark Ready") {
@@ -584,49 +561,6 @@ struct CollectionsView: View {
 
     private func countForStage(_ stage: CollectionStage) -> Int {
         bookingsVM.visibleBookings.filter { $0.status == "completed" && $0.collectionStatus == stage.rawValue }.count
-    }
-
-    private func handleScannedCode(_ code: String) {
-        scannedCode = nil
-        var token: String?
-        if let url = URL(string: code), let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-            token = components.queryItems?.first(where: { $0.name == "token" })?.value
-        } else if code.hasPrefix("token=") {
-            token = String(code.dropFirst(6))
-        } else {
-            token = code
-        }
-
-        guard let token = token, !token.isEmpty else {
-            scanError = "Invalid QR code — no token found"
-            Haptics.error()
-            return
-        }
-
-        Task {
-            if let staff = authVM.staff {
-                await bookingsVM.loadBookings(staff: staff)
-            }
-            await MainActor.run {
-                guard let booking = bookingsVM.bookings.first(where: { $0.managementToken == token }) else {
-                    scanError = "No booking found for this QR code"
-                    Haptics.error()
-                    return
-                }
-                guard booking.status == "completed" else {
-                    scanError = "Booking \(booking.name) is not completed (status: \(booking.status))"
-                    Haptics.warning()
-                    return
-                }
-                if booking.collectionStatus == CollectionStage.collected.rawValue {
-                    scanError = "\(booking.name) is already collected"
-                    Haptics.warning()
-                    return
-                }
-                scannedBooking = booking
-                Haptics.success()
-            }
-        }
     }
 
     private var searchBar: some View {
@@ -746,28 +680,6 @@ struct CollectionsView: View {
                         }
                         .buttonStyle(.plain)
                     }
-
-                    // Scan QR button
-                    Button {
-                        showScanner = true
-                        scanResult = nil
-                        scanError = nil
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "qrcode.viewfinder")
-                                .font(AppFont.body(10, weight: .bold))
-                            Text("Scan QR")
-                                .font(AppFont.body(10, weight: .bold))
-                                .textCase(.uppercase)
-                                .tracking(0.5)
-                        }
-                        .foregroundStyle(PPBrand.charcoal)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(PPBrand.sage)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    .buttonStyle(.plain)
 
                     Spacer(minLength: 4)
 
@@ -2927,198 +2839,6 @@ struct CollectionDetailSheet: View {
     }
 }
 
-// MARK: - Scan Result Sheet (focused view after QR scan)
-
-struct ScanResultSheet: View {
-    let booking: Booking
-    @EnvironmentObject var authVM: AuthViewModel
-    @EnvironmentObject var bookingsVM: BookingsViewModel
-    @Environment(\.dismiss) var dismiss
-    @State private var isMarking = false
-    @State private var alreadyCollected = false
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    if let photo = booking.photos?.first, let url = URL(string: photo) {
-                        CachedAsyncImage(url: url, contentMode: .fit, maxDimension: 1000)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 240)
-                            .background(PPBrand.clay100.opacity(0.35))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    } else {
-                        VStack(spacing: 6) {
-                            Image(systemName: "camera")
-                                .font(AppFont.heading(22))
-                                .foregroundStyle(PPBrand.charcoal.opacity(0.3))
-                            Text("No photo")
-                                .font(PPBrand.bodyFontCaption)
-                                .foregroundStyle(PPBrand.charcoal.opacity(0.4))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 160)
-                        .background(PPBrand.clay100.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-
-                    HStack(spacing: 8) {
-                        Image(systemName: "mappin.circle.fill")
-                            .font(AppFont.body(16, weight: .bold))
-                        Text("Location")
-                            .font(AppFont.body(12, weight: .bold))
-                        Spacer()
-                        Text(scanBookingLocation ?? "Not set")
-                            .font(AppFont.body(14, weight: .bold))
-                    }
-                    .foregroundStyle(PPBrand.charcoal)
-                    .padding(14)
-                    .background(PPBrand.sage)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                    // Info card
-                    VStack(alignment: .leading, spacing: 10) {
-                        scanInfoRow("Name", booking.name, icon: "person.fill")
-                        scanInfoRow("Date", PPDateDisplay.date(booking.date), icon: "calendar")
-                        scanInfoRow("Phone", booking.phone.flatMap { $0.isEmpty ? nil : $0 } ?? "Not provided", icon: "phone.fill")
-                        scanInfoRow("Email", booking.email.flatMap { $0.isEmpty ? nil : $0 } ?? "Not provided", icon: "envelope.fill")
-                        scanInfoRow("Tags", scanTagSummary ?? "No tags added", icon: "checkmark.circle.fill")
-                    }
-                    .padding(16)
-                    .background(PPBrand.sage.opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                    markCollectedButton
-                }
-                .padding(16)
-            }
-            .navigationTitle(booking.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { dismiss() }
-                }
-            }
-        }
-    }
-
-    private func scanInfoRow(_ label: String, _ value: String, icon: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(AppFont.body(12))
-                .foregroundStyle(PPBrand.charcoal.opacity(0.5))
-                .frame(width: 20)
-            Text(label)
-                .font(AppFont.body(11, weight: .bold))
-                .foregroundStyle(PPBrand.charcoal.opacity(0.5))
-                .frame(width: 80, alignment: .leading)
-            Text(value)
-                .font(AppFont.body(12, weight: .semibold))
-                .foregroundStyle(PPBrand.charcoal)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func scanSessionLabel(_ session: String) -> String {
-        switch session {
-        case "painting": return "Painting"
-        case "birthday-party": return "Birthday Party"
-        case "baby-shower-hen": return "Baby Shower / Hen"
-        case "clay-imprints": return "Baby Prints"
-        case "corporate": return "Corporate"
-        case "exclusive-hire": return "Exclusive Hire"
-        default: return session
-        }
-    }
-
-    private var scanBookingLocation: String? {
-        guard let photoTags = booking.photoTags else { return nil }
-        for key in photoTags.keys.sorted() {
-            if let location = photoTags[key]?.first(where: { $0.status == "location" })?.label, !location.isEmpty {
-                return location
-            }
-        }
-        return nil
-    }
-
-    private var scanTagSummary: String? {
-        guard let photoTags = booking.photoTags else { return nil }
-        var counts: [String: Int] = [:]
-        for tag in photoTags.values.flatMap({ $0 }) where tag.status != "location" {
-            let label = tag.label.flatMap { $0.isEmpty ? nil : $0 } ?? tag.status.replacingOccurrences(of: "_", with: " ").capitalized
-            counts[label, default: 0] += 1
-        }
-        guard !counts.isEmpty else { return nil }
-        return counts.keys.sorted().map { counts[$0] == 1 ? $0 : "\(counts[$0]!) × \($0)" }.joined(separator: ", ")
-    }
-
-    private func scanCollectionLabel(_ status: String) -> String {
-        switch status {
-        case CollectionStage.painted.rawValue: return "Painted"
-        case CollectionStage.ready.rawValue: return "Ready to Collect"
-        case CollectionStage.collected.rawValue: return "Collected"
-        default: return status.capitalized
-        }
-    }
-
-    private var markCollectedButton: some View {
-        VStack(spacing: 8) {
-            if alreadyCollected {
-                Text("Already collected")
-                    .font(PPBrand.bodyFontSmall.bold())
-                    .foregroundStyle(PPBrand.charcoal.opacity(0.5))
-            } else {
-                Button {
-                    markCollected()
-                } label: {
-                    HStack(spacing: 8) {
-                        if isMarking {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "checkmark.circle.fill")
-                        }
-                        Text("Mark as Collected")
-                    }
-                    .font(PPBrand.bodyFont.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(isMarking ? Color.green.opacity(0.6) : Color.green)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .disabled(isMarking)
-            }
-        }
-        .padding(.top, 8)
-    }
-
-    private func markCollected() {
-        guard let staff = authVM.staff else { return }
-        isMarking = true
-        Haptics.light()
-        Task {
-            do {
-                try await APIClient.shared.updateCollectionStatus(
-                    bookingId: booking.id, studio: booking.studio,
-                    status: CollectionStage.collected.rawValue, staff: staff
-                )
-                await MainActor.run {
-                    bookingsVM.updateBookingLocally(booking.id, collectionStatus: CollectionStage.collected.rawValue)
-                    isMarking = false
-                    Haptics.success()
-                    dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    isMarking = false
-                    Haptics.error()
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Add Profile Sheet
 
 struct AddProfileSheet: View {
@@ -3427,5 +3147,323 @@ struct ReadyLocationSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - All Files
+
+/// Combined Painted/Ready/Collected list — staff can find a customer's file
+/// by name or phone without knowing which stage it is in.
+struct AllFilesView: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var bookingsVM: BookingsViewModel
+    @State private var nameSearchText = ""
+    @State private var phoneSearchText = ""
+    @State private var selectedBooking: Booking?
+    @State private var expandedDates: Set<String> = []
+    @State private var expandedMonths: Set<String> = []
+    @State private var sortOrder: CollectionsView.SortOrder = .newest
+
+    private func stage(of booking: Booking) -> CollectionStage {
+        CollectionStage(rawValue: booking.collectionStatus ?? "") ?? .painted
+    }
+
+    private func stageColor(_ stage: CollectionStage) -> Color {
+        switch stage {
+        case .painted: return Color(red: 0.85, green: 0.55, blue: 0.1)
+        case .ready: return Color(red: 0.2, green: 0.45, blue: 0.8)
+        case .collected: return Color(red: 0.1, green: 0.6, blue: 0.3)
+        }
+    }
+
+    var filteredBookings: [Booking] {
+        bookingsVM.visibleBookings.filter { b in
+            guard b.status == "completed" else { return false }
+            if !nameSearchText.isEmpty {
+                if !b.name.lowercased().contains(nameSearchText.lowercased()) { return false }
+            }
+            if !phoneSearchText.isEmpty {
+                let digits = (b.phone ?? "").filter { $0.isNumber }
+                let qDigits = phoneSearchText.filter { $0.isNumber }
+                if !digits.contains(qDigits) { return false }
+            }
+            return true
+        }
+    }
+
+    var groupedByDate: [(date: String, bookings: [Booking])] {
+        let map = Dictionary(grouping: filteredBookings, by: { $0.date })
+        var entries = map.map { (date: $0.key, bookings: $0.value.sorted { $0.time < $1.time }) }
+        entries.sort { sortOrder == .newest ? $0.date > $1.date : $0.date < $1.date }
+        return entries
+    }
+
+    var groupedByMonth: [(month: String, groups: [(date: String, bookings: [Booking])])] {
+        var order: [String] = []
+        var map: [String: [(date: String, bookings: [Booking])]] = [:]
+        for entry in groupedByDate {
+            let month = String(entry.date.prefix(7))
+            if map[month] == nil { order.append(month); map[month] = [] }
+            map[month]?.append(entry)
+        }
+        return order.map { (month: $0, groups: map[$0]!) }
+    }
+
+    private var isSearching: Bool {
+        !nameSearchText.trimmingCharacters(in: .whitespaces).isEmpty
+            || !phoneSearchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func monthTitle(_ month: String) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM"
+        guard let d = f.date(from: month) else { return month }
+        let out = DateFormatter()
+        out.dateFormat = "MMMM yyyy"
+        return out.string(from: d)
+    }
+
+    private func formattedDate(_ date: String) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        guard let d = f.date(from: date) else { return date }
+        let out = DateFormatter()
+        out.dateFormat = "EEE d MMM yyyy"
+        return out.string(from: d)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Search bar — name + phone
+                HStack(spacing: 10) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(PPBrand.charcoal.opacity(0.4))
+                            .font(AppFont.body(12))
+                        TextField("Search name", text: $nameSearchText)
+                            .font(AppFont.body(13, weight: .medium))
+                            .foregroundStyle(PPBrand.charcoal)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(PPBrand.charcoal.opacity(0.12), lineWidth: 1))
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "phone")
+                            .foregroundStyle(PPBrand.charcoal.opacity(0.4))
+                            .font(AppFont.body(12))
+                        TextField("Search phone", text: $phoneSearchText)
+                            .font(AppFont.body(13, weight: .medium))
+                            .foregroundStyle(PPBrand.charcoal)
+                            .keyboardType(.phonePad)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(PPBrand.charcoal.opacity(0.12), lineWidth: 1))
+
+                    Picker("", selection: $sortOrder) {
+                        Text("Newest").tag(CollectionsView.SortOrder.newest)
+                        Text("Oldest").tag(CollectionsView.SortOrder.oldest)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 140)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(PPBrand.sage.opacity(0.3))
+
+                if filteredBookings.isEmpty {
+                    EmptyStateView(
+                        icon: "folder",
+                        title: isSearching ? "No files match your search" : "No completed bookings yet",
+                        subtitle: isSearching ? "Check the name or phone number" : "Painted, ready and collected files appear here"
+                    )
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(groupedByMonth, id: \.month) { monthGroup in
+                                monthSection(monthGroup)
+                            }
+                        }
+                        .padding(16)
+                    }
+                }
+            }
+            .background(PPBrand.clay100.opacity(0.3))
+            .sheet(item: $selectedBooking) { booking in
+                CollectionDetailSheet(booking: booking, stage: stage(of: booking))
+                    .environmentObject(authVM)
+                    .environmentObject(bookingsVM)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func monthSection(_ monthGroup: (month: String, groups: [(date: String, bookings: [Booking])])) -> some View {
+        let isExpanded = expandedMonths.contains(monthGroup.month) || isSearching
+        let count = monthGroup.groups.reduce(0) { $0 + $1.bookings.count }
+        VStack(spacing: 0) {
+            Button {
+                withAnimation {
+                    if expandedMonths.contains(monthGroup.month) {
+                        expandedMonths.remove(monthGroup.month)
+                    } else {
+                        expandedMonths.insert(monthGroup.month)
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(AppFont.body(12, weight: .bold))
+                        .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                    Text(monthTitle(monthGroup.month))
+                        .font(AppFont.heading(13))
+                        .foregroundStyle(PPBrand.charcoal)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+                    Text("\(count) booking\(count != 1 ? "s" : "")")
+                        .font(AppFont.heading(10))
+                        .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(PPBrand.charcoal.opacity(0.08))
+                        .clipShape(Capsule())
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 10) {
+                    ForEach(monthGroup.groups, id: \.date) { group in
+                        dateSection(group)
+                    }
+                }
+                .padding(10)
+            }
+        }
+        .background(Color.white.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(PPBrand.charcoal.opacity(0.1), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func dateSection(_ group: (date: String, bookings: [Booking])) -> some View {
+        let isExpanded = expandedDates.contains(group.date) || isSearching
+        VStack(spacing: 0) {
+            Button {
+                withAnimation {
+                    if expandedDates.contains(group.date) {
+                        expandedDates.remove(group.date)
+                    } else {
+                        expandedDates.insert(group.date)
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(AppFont.body(11, weight: .bold))
+                        .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                    Text(formattedDate(group.date))
+                        .font(AppFont.heading(12))
+                        .foregroundStyle(PPBrand.charcoal)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+                    Text("\(group.bookings.count)")
+                        .font(AppFont.heading(10))
+                        .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(PPBrand.charcoal.opacity(0.08))
+                        .clipShape(Capsule())
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 8) {
+                    ForEach(group.bookings) { booking in
+                        fileRow(booking)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+            }
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(PPBrand.charcoal.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func fileRow(_ booking: Booking) -> some View {
+        let bookingStage = stage(of: booking)
+        Button {
+            selectedBooking = booking
+        } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(booking.name)
+                            .font(AppFont.body(14, weight: .bold))
+                            .foregroundStyle(PPBrand.charcoal)
+                        Text(bookingStage.label)
+                            .font(AppFont.body(9, weight: .bold))
+                            .foregroundStyle(stageColor(bookingStage))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(stageColor(bookingStage).opacity(0.15))
+                            .clipShape(Capsule())
+                        if let flag = booking.paintedFlag {
+                            Text(flag == "rush" ? "Rush" : "Return")
+                                .font(AppFont.body(9, weight: .bold))
+                                .foregroundStyle(flag == "rush" ? Color(red: 0.85, green: 0.55, blue: 0.1) : Color.blue)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background((flag == "rush" ? Color(red: 0.85, green: 0.55, blue: 0.1) : Color.blue).opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        if let phone = booking.phone, !phone.isEmpty {
+                            Text(phone)
+                                .font(AppFont.body(11, weight: .medium))
+                        }
+                        Text("\(PPDateDisplay.time(booking.time)) · \(booking.studio)")
+                            .font(AppFont.body(11, weight: .medium))
+                        if let photos = booking.photos, !photos.isEmpty {
+                            Label("\(photos.count)", systemImage: "camera")
+                                .font(AppFont.body(10, weight: .bold))
+                        }
+                    }
+                    .foregroundStyle(PPBrand.charcoal.opacity(0.5))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(AppFont.body(11, weight: .bold))
+                    .foregroundStyle(PPBrand.charcoal.opacity(0.3))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(PPBrand.sage.opacity(0.25))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
     }
 }

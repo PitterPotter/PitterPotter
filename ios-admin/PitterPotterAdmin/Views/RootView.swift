@@ -6,6 +6,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case painted = "Painted"
     case ready = "Ready"
     case collected = "Collected"
+    case allFiles = "All Files"
     case scan = "Scan"
     case floorPlan = "Floor Plan"
     case calendar = "Calendar"
@@ -30,6 +31,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .painted: return "paintbrush"
         case .ready: return "checkmark.circle"
         case .collected: return "tray.full.fill"
+        case .allFiles: return "folder.fill"
         case .scan: return "qrcode.viewfinder"
         case .floorPlan: return "map"
         case .calendar: return "calendar"
@@ -67,6 +69,8 @@ enum AppTab: String, CaseIterable, Identifiable {
             CollectionsView(initialStage: .ready).environmentObject(bookingsVM)
         case .collected:
             CollectionsView(initialStage: .collected).environmentObject(bookingsVM)
+        case .allFiles:
+            AllFilesView().environmentObject(bookingsVM)
         case .scan:
             EmptyView()
         case .floorPlan:

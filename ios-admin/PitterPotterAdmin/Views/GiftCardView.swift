@@ -803,3 +803,81 @@ struct GiftCardScannerSheet: View {
         }
     }
 }
+
+/// Simplified gift-voucher screen for studio staff — create or redeem without
+/// exposing the full issued-voucher list (super admin only).
+struct StaffGiftVouchersView: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    @State private var showingCreate = false
+    @State private var showingRedeem = false
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            VStack(spacing: 8) {
+                Image(systemName: "giftcard")
+                    .font(AppFont.body(40))
+                    .foregroundStyle(PPBrand.charcoal)
+                Text("Gift Vouchers")
+                    .font(AppFont.heading(18))
+                    .foregroundStyle(PPBrand.charcoal)
+                Text("Create a voucher for an in-store purchase or a goodwill replacement, or redeem a customer's voucher.")
+                    .font(AppFont.body(12, weight: .medium))
+                    .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            VStack(spacing: 12) {
+                Button {
+                    showingCreate = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Create Gift Voucher")
+                            .fontWeight(.bold)
+                    }
+                    .font(AppFont.body(15))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(PPBrand.charcoal)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    showingRedeem = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "ticket.fill")
+                        Text("Redeem / Check Balance")
+                            .fontWeight(.bold)
+                    }
+                    .font(AppFont.body(15))
+                    .foregroundStyle(PPBrand.charcoal)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(PPBrand.sage)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 32)
+            .frame(maxWidth: 420)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(PPBrand.clay100.opacity(0.3))
+        .sheet(isPresented: $showingCreate) {
+            CreateGiftCardView()
+                .environmentObject(authVM)
+        }
+        .sheet(isPresented: $showingRedeem) {
+            GiftCardRedeemView()
+                .environmentObject(authVM)
+        }
+    }
+}

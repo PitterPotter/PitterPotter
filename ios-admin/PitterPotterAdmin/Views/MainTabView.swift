@@ -35,7 +35,7 @@ struct MainTabView: View {
                 onNewParty: { showingPartyBooking = true },
                 onNewBabyPrint: { showingNewBabyPrint = true },
                 onExclusiveHire: { showingExclusiveHire = true },
-                onRedeemCard: { showingScanner = true },
+
                 onEditor: authVM.staff?.role == "super_admin" ? { 
                     if let url = URL(string: "https://pitterpotter.co.uk/admin") {
                         UIApplication.shared.open(url)
@@ -73,12 +73,19 @@ struct MainTabView: View {
                 case .collected:
                     CollectionsView(initialStage: .collected)
                         .environmentObject(bookingsVM)
+                case .allFiles:
+                    AllFilesView()
+                        .environmentObject(bookingsVM)
                 case .scan:
                     EmptyView()
                 case .floorPlan:
                     FloorPlanTabView().environmentObject(bookingsVM)
                 case .giftCards:
-                    GiftCardView()
+                    if authVM.staff?.role == "super_admin" {
+                        GiftCardView()
+                    } else {
+                        StaffGiftVouchersView()
+                    }
                 case .analytics:
                     AnalyticsView()
                         .environmentObject(bookingsVM)
@@ -195,10 +202,11 @@ struct WebTabBar: View {
         t.append((.painted, "Painted", nil))
         t.append((.ready, "Ready", nil))
         t.append((.collected, "Collected", nil))
-        t.append((.scan, "Scan", nil))
+        t.append((.allFiles, "All Files", nil))
+        t.append((.scan, "Scan QR", nil))
         t.append((.floorPlan, "Floor Plan", nil))
+        t.append((.giftCards, "Gift Vouchers", nil))
         if isSuperAdmin {
-            t.append((.giftCards, "Gift Vouchers", nil))
             t.append((.analytics, "Analytics", nil))
             t.append((.sms, "SMS", nil))
             t.append((.emailLogs, "Emails", nil))
@@ -294,7 +302,7 @@ struct WebHeaderBar: View {
     var onNewParty: (() -> Void)? = nil
     var onNewBabyPrint: (() -> Void)? = nil
     var onExclusiveHire: (() -> Void)? = nil
-    var onRedeemCard: (() -> Void)? = nil
+
     var onEditor: (() -> Void)? = nil
 
     private var greeting: String {
@@ -333,28 +341,8 @@ struct WebHeaderBar: View {
 
                 Spacer()
 
-                // Right: Redeem Card, Editor, notifications, logout
+                // Right: Editor, notifications, logout
                 HStack(spacing: 12) {
-                    // Redeem Card button
-                    if let onRedeemCard = onRedeemCard {
-                        Button {
-                            onRedeemCard()
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "ticket")
-                                    .font(AppFont.body(11, weight: .bold))
-                                Text("Redeem")
-                                    .font(AppFont.body(11, weight: .bold))
-                            }
-                            .foregroundStyle(PPBrand.charcoal)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(PPBrand.sage)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
                     // Editor button (super admin only)
                     if staff?.role == "super_admin", let onEditor = onEditor {
                         Button {

@@ -58,24 +58,28 @@ struct CalendarView: View {
                     )
                 }
 
-                    BookingsListBelowCalendar(
-                        bookings: studioBookings,
-                        onTap: { booking in
-                            selectedDate = booking.date
-                        },
-                        searchText: $searchText,
-                        staffStudio: authVM.staff?.allowedStudios?.count == 1 ? authVM.staff?.allowedStudios?.first : nil,
-                        canUpdateStatus: authVM.staff?.canUpdateStatus ?? false || authVM.staff?.role == "super_admin",
-                        onUpdateStatus: { id, status in
-                            Task {
-                                if let staff = authVM.staff {
-                                    if let booking = bookingsVM.bookings.first(where: { $0.id == id }) {
-                                        await bookingsVM.updateStatus(booking: booking, status: status, staff: staff)
+                    // Full bookings list — super admin only; staff use
+                    // calendar → day view and never use the list below it.
+                    if authVM.staff?.role == "super_admin" {
+                        BookingsListBelowCalendar(
+                            bookings: studioBookings,
+                            onTap: { booking in
+                                selectedDate = booking.date
+                            },
+                            searchText: $searchText,
+                            staffStudio: authVM.staff?.allowedStudios?.count == 1 ? authVM.staff?.allowedStudios?.first : nil,
+                            canUpdateStatus: authVM.staff?.canUpdateStatus ?? false || authVM.staff?.role == "super_admin",
+                            onUpdateStatus: { id, status in
+                                Task {
+                                    if let staff = authVM.staff {
+                                        if let booking = bookingsVM.bookings.first(where: { $0.id == id }) {
+                                            await bookingsVM.updateStatus(booking: booking, status: status, staff: staff)
+                                        }
                                     }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
             .scrollDismissesKeyboard(.interactively)

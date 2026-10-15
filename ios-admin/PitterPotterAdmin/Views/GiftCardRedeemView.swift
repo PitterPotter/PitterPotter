@@ -5,6 +5,13 @@ struct GiftCardRedeemView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var code = ""
+    private let initialCode: String
+
+    init(initialCode: String = "") {
+        _code = State(initialValue: initialCode)
+        self.initialCode = initialCode
+    }
+
     @State private var balanceResult: GiftCardBalanceResult?
     @State private var redeemAmount = ""
     @State private var isChecking = false
@@ -135,8 +142,13 @@ struct GiftCardRedeemView: View {
                     }
                 }
             }
-            .navigationTitle("Redeem Gift Card")
+            .navigationTitle("Redeem Gift Voucher")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if !initialCode.isEmpty && balanceResult == nil && !isChecking {
+                    checkBalance()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }

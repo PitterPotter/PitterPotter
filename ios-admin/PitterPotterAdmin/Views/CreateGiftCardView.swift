@@ -54,9 +54,8 @@ struct CreateGiftCardView: View {
                     TextField("Email", text: $recipientEmail)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
-                        .disabled(isPhysical)
                     if isPhysical {
-                        Text("Email skipped for physical cards")
+                        Text("Optional for physical cards — voucher is also emailed if filled in")
                             .font(AppFont.body(12, weight: .medium))
                             .foregroundStyle(PPBrand.clay300)
                     }
@@ -167,7 +166,7 @@ struct CreateGiftCardView: View {
                     amount: isActivity ? 0 : amountValue,
                     covers: isActivity ? covers.trimmingCharacters(in: .whitespaces) : "",
                     recipientName: recipientName,
-                    recipientEmail: isPhysical ? "" : recipientEmail,
+                    recipientEmail: recipientEmail,
                     senderName: senderName,
                     message: message,
                     staff: staff,

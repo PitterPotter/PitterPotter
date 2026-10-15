@@ -9,6 +9,10 @@ struct PaintingScannerView: View {
     @State private var scanError: String?
     @State private var scannedBooking: Booking?
     @State private var isMarking = false
+    @State private var voucherCode: String? = nil
+    @State private var showVoucherRedeem = false
+    @State private var isCheckingVoucher = false
+    @State private var manualCode = ""
 
     var body: some View {
         NavigationStack {
@@ -44,6 +48,10 @@ struct PaintingScannerView: View {
                     Button("Close") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showVoucherRedeem) {
+                GiftCardRedeemView(initialCode: voucherCode ?? "")
+                    .environmentObject(authVM)
+            }
         }
     }
 
@@ -61,12 +69,38 @@ struct PaintingScannerView: View {
                     .font(AppFont.body(12, weight: .medium))
                     .foregroundStyle(PPBrand.charcoal.opacity(0.6))
                     .multilineTextAlignment(.center)
+
+                HStack(spacing: 8) {
+                    TextField("Or type the code manually", text: $manualCode)
+                        .font(AppFont.body(14, weight: .medium))
+                        .textFieldStyle(.roundedBorder)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .onSubmit { submitManualCode() }
+                    Button("Look Up") { submitManualCode() }
+                        .font(AppFont.body(12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(PPBrand.charcoal)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .disabled(manualCode.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .padding(.top, 4)
             }
             .padding(24)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, 24)
             .padding(.bottom, 40)
         }
+    }
+
+    private func submitManualCode() {
+        let code = manualCode.trimmingCharacters(in: .whitespaces)
+        guard !code.isEmpty else { return }
+        manualCode = ""
+        handleScannedCode(code)
     }
 
     private func scannedResultView(_ booking: Booking) -> some View {
@@ -269,6 +303,8 @@ struct PaintingScannerView: View {
         }
     }
 
+    // Unified scan: collection QRs carry a booking token (?token=…), gift
+    // voucher QRs carry the raw voucher code — route by content.
     private func handleScannedCode(_ code: String) {
         scannedCode = nil
         var token: String?
@@ -291,13 +327,35 @@ struct PaintingScannerView: View {
                 await bookingsVM.loadBookings(staff: staff)
             }
             await MainActor.run {
-                guard let booking = bookingsVM.bookings.first(where: { $0.managementToken == token }) else {
-                    scanError = "No booking found for this QR code"
-                    Haptics.error()
-                    return
+                if let booking = bookingsVM.bookings.first(where: { $0.managementToken == token }) {
+                    scannedBooking = booking
+                    Haptics.success()
+                } else {
+                    // Not a booking token — try it as a gift voucher code
+                    checkVoucher(token)
                 }
-                scannedBooking = booking
-                Haptics.success()
+            }
+        }
+    }
+
+    private func checkVoucher(_ code: String) {
+        guard let staff = authVM.staff else { return }
+        isCheckingVoucher = true
+        Task {
+            do {
+                _ = try await APIClient.shared.checkGiftCardBalance(code: code, staff: staff)
+                await MainActor.run {
+                    isCheckingVoucher = false
+                    voucherCode = code
+                    showVoucherRedeem = true
+                    Haptics.success()
+                }
+            } catch {
+                await MainActor.run {
+                    isCheckingVoucher = false
+                    scanError = "No booking or gift voucher found for this QR code"
+                    Haptics.error()
+                }
             }
         }
     }

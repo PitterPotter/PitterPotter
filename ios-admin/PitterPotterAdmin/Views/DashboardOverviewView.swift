@@ -23,6 +23,11 @@ struct DashboardOverviewView: View {
         return studios
     }
 
+    // Studio switcher only makes sense when staff can see more than one studio
+    private var canSwitchStudio: Bool {
+        (authVM.staff?.visibleStudios.count ?? Studio.allCases.count) > 1
+    }
+
     private var filteredBookings: [Booking] {
         bookingsVM.visibleBookings
     }
@@ -161,7 +166,7 @@ struct DashboardOverviewView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    studioToggle
+                    if canSwitchStudio { studioToggle }
 
                     statsGrid
 

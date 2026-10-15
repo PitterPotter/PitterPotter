@@ -138,6 +138,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [adminScanning, setAdminScanning] = useState(false);
   const [unifiedScanning, setUnifiedScanning] = useState(false);
   const [scanCollectTarget, setScanCollectTarget] = useState<BookingInquiry | null>(null);
+  const [scanNotice, setScanNotice] = useState<{ title: string; detail: string; tone: 'warning' | 'error' } | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [emailLogsLoading, setEmailLogsLoading] = useState(false);
@@ -1420,9 +1421,26 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     if (token) {
       setUnifiedScanning(false);
       const booking = inquiries.find(b => b.managementToken === token);
-      if (!booking) { showToast('No booking found for this QR code', 'error'); return; }
-      if (resolveStage(booking) === 'collected') { showToast(`${booking.name} is already collected`, 'error'); return; }
-      if (booking.status !== 'completed') { showToast(`${booking.name} is not completed (status: ${booking.status})`, 'error'); return; }
+      if (!booking) {
+        setScanNotice({ title: 'No booking found', detail: 'This QR code does not match any booking or gift voucher.', tone: 'error' });
+        return;
+      }
+      if (resolveStage(booking) === 'collected') {
+        setScanNotice({
+          title: 'Already collected',
+          detail: `${booking.name} — ${booking.studio} · ${booking.date} at ${booking.time}${booking.collectedAt ? ` · collected ${booking.collectedAt.slice(0, 10)}` : ''}`,
+          tone: 'warning',
+        });
+        return;
+      }
+      if (booking.status !== 'completed') {
+        setScanNotice({
+          title: 'Not ready to collect',
+          detail: `${booking.name} — booking status is "${booking.status}"`,
+          tone: 'warning',
+        });
+        return;
+      }
       setScanCollectTarget(booking);
       return;
     }
@@ -2784,7 +2802,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               <p className="text-[10px] text-[#1B2D3C]/60 truncate sm:hidden">{staff.name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="w-full sm:w-auto space-y-2">
+            {/* Row 1 — everyday actions */}
+            <div className="flex items-center gap-2 w-full justify-end">
             {canAddWalkIn && (
               <>
                 <button
@@ -2832,33 +2852,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 >
                   <Wine className="w-4 h-4" /> <span className="hidden sm:inline">New Sip & Paint</span><span className="sm:hidden">Sip & Paint</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setActiveTab('dashboard');
-                    setNewBooking(prev => ({ ...prev, sessionType: 'exclusive-hire', time: '' }));
-                    setLockedSessionType(null);
-                    setShowAddModal(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px]"
-                >
-                  <Clock className="w-4 h-4" /> <span className="hidden sm:inline">Exclusive Hire</span><span className="sm:hidden">Hire</span>
-                </button>
               </>
-            )}
-            {canEdit && (
-              <button
-                onClick={() => {
-                  setBlockDraft(prev => ({
-                    ...prev,
-                    studio: studioFilter !== 'all' ? studioFilter : (staff.allowedStudios?.[0] ?? 'Wimbledon'),
-                    date: floorPlanDate,
-                  }));
-                  setShowBlockModal(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px]"
-              >
-                <Ban className="w-4 h-4" /> <span className="hidden sm:inline">Block Studio</span><span className="sm:hidden">Block</span>
-              </button>
             )}
             <NotificationBell
               staff={staff}
@@ -2891,6 +2885,41 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             >
               <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
             </button>
+            </div>
+
+            {/* Row 2 — less frequent actions */}
+            {(canAddWalkIn || canEdit) && (
+              <div className="flex items-center gap-2 w-full justify-end">
+                {canAddWalkIn && (
+                  <button
+                    onClick={() => {
+                      setActiveTab('dashboard');
+                      setNewBooking(prev => ({ ...prev, sessionType: 'exclusive-hire', time: '' }));
+                      setLockedSessionType(null);
+                      setShowAddModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px]"
+                  >
+                    <Clock className="w-4 h-4" /> <span className="hidden sm:inline">Exclusive Hire</span><span className="sm:hidden">Hire</span>
+                  </button>
+                )}
+                {canEdit && (
+                  <button
+                    onClick={() => {
+                      setBlockDraft(prev => ({
+                        ...prev,
+                        studio: studioFilter !== 'all' ? studioFilter : (staff.allowedStudios?.[0] ?? 'Wimbledon'),
+                        date: floorPlanDate,
+                      }));
+                      setShowBlockModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px]"
+                  >
+                    <Ban className="w-4 h-4" /> <span className="hidden sm:inline">Block Studio</span><span className="sm:hidden">Block</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {visibleStudios.length > 1 && (
@@ -5298,6 +5327,27 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 className="flex-1 px-4 py-2 bg-emerald-600 text-white font-bold text-xs uppercase tracking-wider hover:bg-emerald-700 transition-all cursor-pointer rounded-lg"
               >
                 Mark Collected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scan outcome notice — hard to miss */}
+      {scanNotice && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 sm:p-6" onClick={() => setScanNotice(null)}>
+          <div className="bg-white p-6 border border-[#1B2D3C]/20 max-w-sm w-full space-y-4 shadow-lg sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center ${scanNotice.tone === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>
+                <AlertCircle className={`w-8 h-8 ${scanNotice.tone === 'warning' ? 'text-amber-600' : 'text-red-600'}`} />
+              </div>
+              <h3 className="font-heading text-lg font-black text-[#1B2D3C] uppercase tracking-wide">{scanNotice.title}</h3>
+              <p className="text-sm font-semibold text-[#1B2D3C]/70">{scanNotice.detail}</p>
+              <button
+                onClick={() => setScanNotice(null)}
+                className={`w-full px-4 py-2.5 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer rounded-lg ${scanNotice.tone === 'warning' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-red-500 hover:bg-red-600'}`}
+              >
+                OK
               </button>
             </div>
           </div>

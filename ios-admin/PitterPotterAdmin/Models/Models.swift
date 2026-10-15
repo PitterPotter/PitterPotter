@@ -158,6 +158,7 @@ struct Booking: Codable, Identifiable, Hashable {
     var collectionStatus: String?
     var readyAt: String?
     var collectedAt: String?
+    var paintedFlag: String?
     var photoTags: [String: [PhotoTag]]?
 
     var bookingStatus: BookingStatus? {

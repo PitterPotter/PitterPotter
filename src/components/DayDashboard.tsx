@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Users, CheckCircle, Clock, MapPin, Phone, Mail, Gift,
-  FileText, X, ChevronRight, ChevronLeft, UserCheck, Camera,
+  FileText, X, ChevronRight, ChevronLeft, UserCheck, Camera, MoreVertical, Zap, RotateCcw,
 } from 'lucide-react';
 import { BookingInquiry } from '../types';
 
@@ -15,6 +15,7 @@ interface DayDashboardProps {
   onAddWalkIn: () => void;
   onAddBooking: (sessionType: string) => void;
   onUploadPhoto?: (booking: BookingInquiry, files: File[]) => void;
+  onSetPaintedFlag?: (booking: BookingInquiry, flag: 'rush' | 'return_to_finish' | null) => void;
   canUpdateStatus: boolean;
   canAddWalkIn: boolean;
 }
@@ -68,6 +69,7 @@ function BookingCard({
   onCancel,
   onAddPhoto,
   onClick,
+  onSetPaintedFlag,
 }: {
   booking: BookingInquiry;
   column: 'bookings' | 'seated' | 'complete' | 'noshow';
@@ -78,7 +80,9 @@ function BookingCard({
   onCancel?: (id: string) => void;
   onAddPhoto?: (booking: BookingInquiry) => void;
   onClick: (booking: BookingInquiry) => void;
+  onSetPaintedFlag?: (booking: BookingInquiry, flag: 'rush' | 'return_to_finish' | null) => void;
 }) {
+  const [flagMenuOpen, setFlagMenuOpen] = useState(false);
   return (
     <div
       onClick={() => onClick(booking)}
@@ -99,6 +103,16 @@ function BookingCard({
             <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${SESSION_BADGE[booking.sessionType] || 'bg-gray-100 text-gray-700'}`}>
               {SESSION_LABELS[booking.sessionType] || booking.sessionType}
             </span>
+            {booking.paintedFlag === 'rush' && (
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700 inline-flex items-center gap-0.5">
+                <Zap className="w-2.5 h-2.5" /> Rush
+              </span>
+            )}
+            {booking.paintedFlag === 'return_to_finish' && (
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-sky-100 text-sky-700 inline-flex items-center gap-0.5">
+                <RotateCcw className="w-2.5 h-2.5" /> Return
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 mt-1.5 text-[10px] font-semibold text-[#1B2D3C]/70">
             <span className="flex items-center gap-0.5"><Users className="w-3 h-3" />{booking.paintersCount}</span>
@@ -115,6 +129,44 @@ function BookingCard({
             {showStudio && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{booking.studio}</span>}
           </div>
         </div>
+        {canUpdate && onSetPaintedFlag && (
+          <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setFlagMenuOpen(v => !v)}
+              className="p-1 rounded-md hover:bg-[#1B2D3C]/10 text-[#1B2D3C]/50 transition-colors cursor-pointer"
+              title="More actions"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            {flagMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40 cursor-default" onClick={() => setFlagMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-white border border-[#1B2D3C]/15 rounded-lg shadow-lg py-1">
+                  <button
+                    onClick={() => { setFlagMenuOpen(false); onSetPaintedFlag(booking, 'rush'); }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] font-bold transition-colors cursor-pointer ${booking.paintedFlag === 'rush' ? 'bg-amber-50 text-amber-700' : 'text-[#1B2D3C] hover:bg-[#F8FAFA]'}`}
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-500" /> Rush service
+                  </button>
+                  <button
+                    onClick={() => { setFlagMenuOpen(false); onSetPaintedFlag(booking, 'return_to_finish'); }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] font-bold transition-colors cursor-pointer ${booking.paintedFlag === 'return_to_finish' ? 'bg-sky-50 text-sky-700' : 'text-[#1B2D3C] hover:bg-[#F8FAFA]'}`}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-sky-500" /> Return to finish
+                  </button>
+                  {booking.paintedFlag && (
+                    <button
+                      onClick={() => { setFlagMenuOpen(false); onSetPaintedFlag(booking, null); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] font-bold text-[#1B2D3C]/60 hover:bg-[#F8FAFA] transition-colors cursor-pointer border-t border-[#1B2D3C]/10"
+                    >
+                      <X className="w-3.5 h-3.5" /> Remove flag
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
       {booking.photos && booking.photos.length > 0 && (
         <div className="flex gap-1 mt-2 flex-wrap">
@@ -285,6 +337,7 @@ export default function DayDashboard({
   onUpdateStatus,
   onEditBooking,
   onUploadPhoto,
+  onSetPaintedFlag,
   canUpdateStatus,
 }: DayDashboardProps) {
   const [selectedBooking, setSelectedBooking] = useState<BookingInquiry | null>(null);
@@ -399,6 +452,7 @@ export default function DayDashboard({
                 onNoShow={handleNoShow}
                 onCancel={handleCancel}
                 onClick={setSelectedBooking}
+                onSetPaintedFlag={onSetPaintedFlag}
               />
             ))
           )}
@@ -423,6 +477,7 @@ export default function DayDashboard({
                 onMove={handleMove}
                 onAddPhoto={handleAddPhoto}
                 onClick={setSelectedBooking}
+                onSetPaintedFlag={onSetPaintedFlag}
               />
             ))
           )}
@@ -447,6 +502,7 @@ export default function DayDashboard({
                 onMove={handleMove}
                 onAddPhoto={handleAddPhoto}
                 onClick={setSelectedBooking}
+                onSetPaintedFlag={onSetPaintedFlag}
               />
             ))
           )}

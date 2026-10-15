@@ -133,6 +133,7 @@ function toBookingInquiry(row: any): any {
     photos: row.photos || undefined,
     photoTags: row.photo_tags || undefined,
     collectionStatus: row.collection_status || undefined,
+    paintedFlag: row.painted_flag || undefined,
     readyAt: row.ready_at || undefined,
     collectedAt: row.collected_at || undefined,
     managementToken: row.management_token || undefined,
@@ -178,6 +179,7 @@ function toBookingRow(booking: any): any {
     photos: opt(booking.photos),
     photo_tags: opt(booking.photoTags),
     collection_status: opt(booking.collectionStatus),
+    painted_flag: opt(booking.paintedFlag),
     ready_at: opt(booking.readyAt),
     collected_at: opt(booking.collectedAt),
   };

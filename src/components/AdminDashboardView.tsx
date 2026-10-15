@@ -843,6 +843,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       const msg = err && typeof err === 'object' && 'message' in err ? (err as Error).message : '';
       if (msg === 'Unauthorized') { handleUnauthorized(); return; }
       console.error('Failed to load inquiries:', err);
+      showToast(`Failed to load bookings: ${msg || 'network error'}`, 'error');
     }
   };
 
@@ -1987,6 +1988,21 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     } catch {
       setInquiries(prev => prev.map(i => i.id === booking.id ? booking : i));
       showToast('Failed to update collection status', 'error');
+    }
+  };
+
+  const handleSetPaintedFlag = async (booking: BookingInquiry, flag: 'rush' | 'return_to_finish' | null) => {
+    if (!canManageBooking(booking)) { showToast('You can only manage bookings for your assigned studio', 'error'); return; }
+    setInquiries(prev => prev.map(i => i.id === booking.id ? { ...i, paintedFlag: flag } : i));
+    try {
+      await patchBooking(booking.id, { paintedFlag: flag }, staff);
+      showToast(
+        flag === 'rush' ? `${booking.name} marked as rush`
+        : flag === 'return_to_finish' ? `${booking.name} marked return to finish`
+        : 'Flag cleared', 'success');
+    } catch {
+      setInquiries(prev => prev.map(i => i.id === booking.id ? booking : i));
+      showToast('Failed to update flag', 'error');
     }
   };
 
@@ -3214,6 +3230,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           onEditBooking={(booking) => handleEditBooking(booking)}
           onAddWalkIn={() => setShowGhostModal(true)}
           onUploadPhoto={(booking, files) => { uploadPhotosToBooking(booking, files); }}
+          onSetPaintedFlag={handleSetPaintedFlag}
           canUpdateStatus={canUpdateStatus}
           canAddWalkIn={canAddWalkIn}
         />
@@ -5994,6 +6011,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           onRemovePhotoTag={handleRemovePhotoTag}
           onBulkAddPhotoTag={handleBulkAddPhotoTag}
           onCreateProfile={(data) => handleCreateProfile(data, 'painted')}
+          onSetPaintedFlag={handleSetPaintedFlag}
         />
       )}
 

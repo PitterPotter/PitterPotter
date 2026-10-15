@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Search, Bell, Camera, Users, Clock, MapPin, Check, Package, Phone, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertCircle, CheckSquare, Square, Plus, QrCode, Tag } from 'lucide-react';
+import { Search, Bell, Camera, Users, Clock, MapPin, Check, Package, Phone, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertCircle, CheckSquare, Square, Plus, QrCode, Tag, Zap, RotateCcw, MoreVertical } from 'lucide-react';
 import { BookingInquiry } from '../../types';
 import Skeleton from '../Skeleton';
 import ImageModal from '../ImageModal';
@@ -27,6 +27,7 @@ interface CollectionsTabProps {
   onRemovePhotoTag?: (booking: BookingInquiry, photoIndex: number, tagIndex: number) => void;
   onBulkAddPhotoTag?: (bookings: BookingInquiry[], label: string, status: string) => void;
   onCreateProfile?: (data: { name: string; phone: string; date: string; studio: string; photos: string[] }) => Promise<BookingInquiry>;
+  onSetPaintedFlag?: (booking: BookingInquiry, flag: 'rush' | 'return_to_finish' | null) => void;
 }
 
 const STAGE_INFO: Record<CollectionStage, { label: string; empty: string; accent: string; badge: string }> = {
@@ -55,6 +56,7 @@ function BookingCard({
   onAddPhotoTag,
   onRemovePhotoTag,
   onOpenImage,
+  onSetPaintedFlag,
 }: {
   booking: BookingInquiry;
   stage: CollectionStage;
@@ -69,10 +71,12 @@ function BookingCard({
   onAddPhotoTag?: (booking: BookingInquiry, photoIndex: number, label: string, status: string, x: number, y: number) => void;
   onRemovePhotoTag?: (booking: BookingInquiry, photoIndex: number, tagIndex: number) => void;
   onOpenImage?: (images: string[], index: number) => void;
+  onSetPaintedFlag?: (booking: BookingInquiry, flag: 'rush' | 'return_to_finish' | null) => void;
 }) {
   const photos = booking.photos ?? [];
   const photoTags = booking.photoTags ?? {};
   const [tagMode, setTagMode] = useState(false);
+  const [flagMenuOpen, setFlagMenuOpen] = useState(false);
   const [activeTagPopover, setActiveTagPopover] = useState<{ photoIndex: number; x: number; y: number } | null>(null);
   const tagColors = TAG_COLORS;
   const tagLabels = TAG_LABELS;
@@ -127,6 +131,16 @@ function BookingCard({
               </button>
             )}
             <p className="text-sm font-black text-[#1B2D3C] truncate">{booking.name}</p>
+            {booking.paintedFlag === 'rush' && (
+              <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-wider rounded-full">
+                <Zap className="w-2.5 h-2.5" /> Rush
+              </span>
+            )}
+            {booking.paintedFlag === 'return_to_finish' && (
+              <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-sky-100 text-sky-700 text-[8px] font-black uppercase tracking-wider rounded-full">
+                <RotateCcw className="w-2.5 h-2.5" /> Return
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 mt-1 text-[10px] font-semibold text-[#1B2D3C]/60 flex-wrap">
             <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{booking.time}</span>
@@ -238,6 +252,44 @@ function BookingCard({
 
       {canUpdate && (
         <div className="flex items-center gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+          {stage === 'painted' && onSetPaintedFlag && (
+            <div className="relative">
+              <button
+                onClick={() => setFlagMenuOpen(v => !v)}
+                className="inline-flex items-center px-1.5 py-1 bg-white border border-[#1B2D3C]/15 text-[#1B2D3C] rounded-lg hover:bg-[#D6E2E9] transition-colors cursor-pointer"
+                title="More actions"
+              >
+                <MoreVertical className="w-3 h-3" />
+              </button>
+              {flagMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40 cursor-default" onClick={() => setFlagMenuOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1 z-50 w-44 bg-white border border-[#1B2D3C]/15 rounded-lg shadow-lg py-1">
+                    <button
+                      onClick={() => { setFlagMenuOpen(false); onSetPaintedFlag(booking, 'rush'); }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] font-bold transition-colors cursor-pointer ${booking.paintedFlag === 'rush' ? 'bg-amber-50 text-amber-700' : 'text-[#1B2D3C] hover:bg-[#F8FAFA]'}`}
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-500" /> Rush service
+                    </button>
+                    <button
+                      onClick={() => { setFlagMenuOpen(false); onSetPaintedFlag(booking, 'return_to_finish'); }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] font-bold transition-colors cursor-pointer ${booking.paintedFlag === 'return_to_finish' ? 'bg-sky-50 text-sky-700' : 'text-[#1B2D3C] hover:bg-[#F8FAFA]'}`}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-sky-500" /> Return to finish
+                    </button>
+                    {booking.paintedFlag && (
+                      <button
+                        onClick={() => { setFlagMenuOpen(false); onSetPaintedFlag(booking, null); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] font-bold text-[#1B2D3C]/60 hover:bg-[#F8FAFA] transition-colors cursor-pointer border-t border-[#1B2D3C]/10"
+                      >
+                        <X className="w-3.5 h-3.5" /> Remove flag
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <label className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-colors ${
             uploading
               ? 'bg-[#D6E2E9]/40 text-[#1B2D3C]/50 cursor-wait'
@@ -327,6 +379,7 @@ export default function CollectionsTab({
   onRemovePhotoTag,
   onBulkAddPhotoTag,
   onCreateProfile,
+  onSetPaintedFlag,
 }: CollectionsTabProps) {
   const [nameQuery, setNameQuery] = useState('');
   const [phoneQuery, setPhoneQuery] = useState('');
@@ -340,6 +393,8 @@ export default function CollectionsTab({
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [showNoPhotoGroup, setShowNoPhotoGroup] = useState(false);
+  const [showRushGroup, setShowRushGroup] = useState(true);
+  const [showReturnGroup, setShowReturnGroup] = useState(false);
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
@@ -381,14 +436,22 @@ export default function CollectionsTab({
     });
   }, [eligible, fixedStage, nameQuery, phoneQuery, dateQuery, studioFilter, needsPhotoOnly]);
 
-  // Painted: photo-less bookings are the stale backlog — they live in a
-  // collapsed bucket at the bottom so the active ~2-week queue stays short.
+  // Painted buckets: flagged bookings (rush / return-to-finish) get their own
+  // sections; photo-less bookings are the stale backlog bucket at the bottom.
+  const rushList = useMemo(
+    () => fixedStage === 'painted' ? filtered.filter(b => b.paintedFlag === 'rush') : [],
+    [filtered, fixedStage],
+  );
+  const returnList = useMemo(
+    () => fixedStage === 'painted' ? filtered.filter(b => b.paintedFlag === 'return_to_finish') : [],
+    [filtered, fixedStage],
+  );
   const mainList = useMemo(
-    () => fixedStage === 'painted' ? filtered.filter(b => b.photos && b.photos.length > 0) : filtered,
+    () => fixedStage === 'painted' ? filtered.filter(b => !b.paintedFlag && b.photos && b.photos.length > 0) : filtered,
     [filtered, fixedStage],
   );
   const paintedNoPhoto = useMemo(
-    () => fixedStage === 'painted' ? filtered.filter(b => !(b.photos && b.photos.length > 0)) : [],
+    () => fixedStage === 'painted' ? filtered.filter(b => !b.paintedFlag && !(b.photos && b.photos.length > 0)) : [],
     [filtered, fixedStage],
   );
 
@@ -513,6 +576,7 @@ export default function CollectionsTab({
       onAddPhotoTag={onAddPhotoTag}
       onRemovePhotoTag={onRemovePhotoTag}
       onOpenImage={(images, index) => { setModalImages(images); setModalIndex(index); setModalPhotoTags(b.photoTags); }}
+      onSetPaintedFlag={onSetPaintedFlag}
     />
   );
 
@@ -846,7 +910,7 @@ export default function CollectionsTab({
           <Skeleton className="h-24" />
           <Skeleton className="h-24" />
         </div>
-      ) : grouped.length === 0 ? (
+      ) : grouped.length === 0 && rushList.length === 0 && returnList.length === 0 && paintedNoPhoto.length === 0 ? (
         <div className="bg-white border border-[#1B2D3C]/15 rounded-xl p-12 text-center">
           <p className="text-sm text-[#1B2D3C]/60 font-semibold">
             {hasFilters ? 'No bookings match your search' : info.empty}
@@ -858,6 +922,29 @@ export default function CollectionsTab({
         </div>
       ) : (
         <div className="space-y-3">
+          {/* Painted: RUSH bucket pinned above the month groups */}
+          {fixedStage === 'painted' && rushList.length > 0 && (
+            <div className="border border-amber-300 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setShowRushGroup(v => !v)}
+                className="w-full flex items-center gap-2 px-4 py-3 bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
+              >
+                {showRushGroup ? <ChevronUp className="w-4 h-4 text-amber-600" /> : <ChevronDown className="w-4 h-4 text-amber-600" />}
+                <h3 className="text-sm font-black text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-4 h-4" /> Rush
+                </h3>
+                <span className="px-2 py-0.5 bg-amber-200/70 text-amber-800 text-[10px] font-black rounded-full">
+                  {rushList.length} booking{rushList.length !== 1 ? 's' : ''}
+                </span>
+              </button>
+              {showRushGroup && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3 bg-amber-50/40">
+                  {rushList.map(b => renderCard(b))}
+                </div>
+              )}
+            </div>
+          )}
+
           {groupedByMonth.map(([month, dateGroups]) => renderMonth(month, dateGroups))}
 
           {/* Painted: photo-less backlog collapsed into its own bucket */}
@@ -878,6 +965,29 @@ export default function CollectionsTab({
               {showNoPhotoGroup && (
                 <div className="space-y-3 p-3">
                   {noPhotoByMonth.map(([month, dateGroups]) => renderMonth(month, dateGroups))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Painted: return-to-finish bucket at the very bottom */}
+          {fixedStage === 'painted' && returnList.length > 0 && (
+            <div className="border border-sky-300 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setShowReturnGroup(v => !v)}
+                className="w-full flex items-center gap-2 px-4 py-3 bg-sky-50 hover:bg-sky-100 transition-colors cursor-pointer"
+              >
+                {showReturnGroup ? <ChevronUp className="w-4 h-4 text-sky-600" /> : <ChevronDown className="w-4 h-4 text-sky-600" />}
+                <h3 className="text-sm font-black text-sky-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <RotateCcw className="w-4 h-4" /> Return to finish
+                </h3>
+                <span className="px-2 py-0.5 bg-sky-200/70 text-sky-800 text-[10px] font-black rounded-full">
+                  {returnList.length} booking{returnList.length !== 1 ? 's' : ''}
+                </span>
+              </button>
+              {showReturnGroup && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3 bg-sky-50/40">
+                  {returnList.map(b => renderCard(b))}
                 </div>
               )}
             </div>

@@ -1061,6 +1061,7 @@ struct DayDashboardView: View {
                         onCancel: { id in cancelTarget = bookings.first(where: { $0.id == id }) },
                         onTap: { selectedBooking = $0 },
                         onAddPhoto: { photoBooking = $0 },
+                        onSetPaintedFlag: { b, flag in setPaintedFlag(b, flag) },
                         staffStudio: staffStudio
                     )
                     .frame(width: 280)
@@ -1075,6 +1076,7 @@ struct DayDashboardView: View {
                         onNoShow: nil,
                         onTap: { selectedBooking = $0 },
                         onAddPhoto: { photoBooking = $0 },
+                        onSetPaintedFlag: { b, flag in setPaintedFlag(b, flag) },
                         staffStudio: staffStudio
                     )
                     .frame(width: 280)
@@ -1089,6 +1091,7 @@ struct DayDashboardView: View {
                         onNoShow: nil,
                         onTap: { selectedBooking = $0 },
                         onAddPhoto: { photoBooking = $0 },
+                        onSetPaintedFlag: { b, flag in setPaintedFlag(b, flag) },
                         staffStudio: staffStudio
                     )
                     .frame(width: 280)
@@ -1182,6 +1185,29 @@ struct DayDashboardView: View {
         onUpdateStatus(id, .noShow)
     }
 
+    /// Painted-queue flag (rush / return to finish) via a partial patch.
+    private func setPaintedFlag(_ booking: Booking, _ flag: String?) {
+        guard let staff = authVM.staff else { return }
+        Haptics.light()
+        var updated = bookingsVM.bookings.first(where: { $0.id == booking.id }) ?? booking
+        updated.paintedFlag = flag
+        Task {
+            let ok = await bookingsVM.patchBooking(
+                id: booking.id, studio: booking.studio,
+                fields: ["paintedFlag": flag ?? NSNull()],
+                updated: updated, staff: staff
+            )
+            if ok {
+                await MainActor.run {
+                    toastManager.show(
+                        flag == "rush" ? "Marked as rush" : flag == "return_to_finish" ? "Marked return to finish" : "Flag cleared",
+                        type: .success
+                    )
+                }
+            }
+        }
+    }
+
     private func handleCancelConfirm() {
         guard let b = cancelTarget else { return }
         onUpdateStatus(b.id, .cancelled)
@@ -1237,6 +1263,7 @@ struct KanbanColumn: View {
     var onCancel: ((String) -> Void)? = nil
     let onTap: (Booking) -> Void
     let onAddPhoto: (Booking) -> Void
+    var onSetPaintedFlag: ((Booking, String?) -> Void)? = nil
     var staffStudio: String? = nil
 
     var body: some View {
@@ -1274,6 +1301,7 @@ struct KanbanColumn: View {
                         onCancel: onCancel,
                         onTap: { onTap(booking) },
                         onAddPhoto: onAddPhoto,
+                        onSetPaintedFlag: onSetPaintedFlag,
                         staffStudio: staffStudio
                     )
                 }
@@ -1309,6 +1337,7 @@ struct KanbanBookingCard: View {
     var onCancel: ((String) -> Void)? = nil
     let onTap: () -> Void
     let onAddPhoto: (Booking) -> Void
+    var onSetPaintedFlag: ((Booking, String?) -> Void)? = nil
     var staffStudio: String? = nil
 
     private var sessionLabel: String? {
@@ -1386,10 +1415,38 @@ struct KanbanBookingCard: View {
                 }
                 .buttonStyle(.plain)
 
-                Text(booking.name)
-                    .font(AppFont.heading(14))
-                    .foregroundStyle(PPBrand.charcoal)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(booking.name)
+                        .font(AppFont.heading(14))
+                        .foregroundStyle(PPBrand.charcoal)
+                        .lineLimit(1)
+                    if booking.paintedFlag == "rush" {
+                        HStack(spacing: 2) {
+                            Image(systemName: "bolt.fill")
+                                .font(AppFont.body(8, weight: .bold))
+                            Text("Rush")
+                                .font(AppFont.body(8, weight: .black))
+                        }
+                        .foregroundStyle(Color(red: 0.75, green: 0.45, blue: 0.05))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(red: 1.0, green: 0.94, blue: 0.8))
+                        .clipShape(Capsule())
+                    }
+                    if booking.paintedFlag == "return_to_finish" {
+                        HStack(spacing: 2) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(AppFont.body(8, weight: .bold))
+                            Text("Return")
+                                .font(AppFont.body(8, weight: .black))
+                        }
+                        .foregroundStyle(Color(red: 0.15, green: 0.45, blue: 0.75))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(red: 0.85, green: 0.93, blue: 1.0))
+                        .clipShape(Capsule())
+                    }
+                }
 
                 HStack(spacing: 6) {
                     Image(systemName: "person.2.fill")
@@ -1434,6 +1491,42 @@ struct KanbanBookingCard: View {
 
                 if canUpdate {
                     HStack(spacing: 6) {
+                        // ⋯ menu: rush service / return to finish
+                        if let onSetPaintedFlag {
+                            Menu {
+                                Button {
+                                    onSetPaintedFlag(booking, "rush")
+                                } label: {
+                                    Label("Rush service", systemImage: "bolt.fill")
+                                }
+                                Button {
+                                    onSetPaintedFlag(booking, "return_to_finish")
+                                } label: {
+                                    Label("Return to finish", systemImage: "arrow.uturn.backward")
+                                }
+                                if booking.paintedFlag != nil {
+                                    Divider()
+                                    Button(role: .destructive) {
+                                        onSetPaintedFlag(booking, nil)
+                                    } label: {
+                                        Label("Remove flag", systemImage: "xmark")
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(AppFont.body(9, weight: .bold))
+                                    .foregroundStyle(PPBrand.charcoal)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.white.opacity(0.8))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(PPBrand.charcoal.opacity(0.15), lineWidth: 1)
+                                    )
+                            }
+                        }
+
                         if columnType != .bookings {
                             Button {
                                 onMove(booking.id, "back")

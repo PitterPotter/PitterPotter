@@ -39,6 +39,7 @@ export function toBookingInquiry(row: any): BookingInquiry {
     photos: row.photos || undefined,
     photoTags: row.photo_tags || undefined,
     collectionStatus: row.collection_status || undefined,
+    paintedFlag: row.painted_flag || undefined,
     readyAt: row.ready_at || undefined,
     collectedAt: row.collected_at || undefined,
   };
@@ -78,6 +79,7 @@ export function toBookingRow(booking: BookingInquiry): any {
     collection_status: booking.collectionStatus || null,
     ready_at: booking.readyAt || null,
     collected_at: booking.collectedAt || null,
+    painted_flag: booking.paintedFlag || null,
   };
 }
 

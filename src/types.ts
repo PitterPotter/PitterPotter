@@ -54,6 +54,7 @@ export interface BookingInquiry {
   photos?: string[];
   photoTags?: Record<number, { label?: string; status: string; x: number; y: number }[]>;
   collectionStatus?: 'painted' | 'ready' | 'collected';
+  paintedFlag?: 'rush' | 'return_to_finish' | null;
   readyAt?: string;
   collectedAt?: string;
 }

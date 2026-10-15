@@ -24,6 +24,8 @@ struct CollectionsView: View {
     @State private var expandedDates: Set<String> = []
     @State private var expandedMonths: Set<String> = []
     @State private var showNoPhotoGroup = false
+    @State private var showRushGroup = true
+    @State private var showReturnGroup = false
     @State private var sortOrder: SortOrder = .newest
     @State private var needsPhotoOnly = false
     @State private var selectMode = false
@@ -61,14 +63,22 @@ struct CollectionsView: View {
         }
     }
 
-    // Painted: photo-less bookings are the stale backlog — they live in a
-    // collapsed bucket at the bottom so the active ~2-week queue stays short.
+    // Painted: flagged bookings (rush / return-to-finish) get their own
+    // buckets; photo-less bookings are the stale backlog at the bottom.
+    var rushBookings: [Booking] {
+        initialStage == .painted ? filteredBookings.filter { $0.paintedFlag == "rush" } : []
+    }
+
+    var returnBookings: [Booking] {
+        initialStage == .painted ? filteredBookings.filter { $0.paintedFlag == "return_to_finish" } : []
+    }
+
     var mainBookings: [Booking] {
-        initialStage == .painted ? filteredBookings.filter { !($0.photos?.isEmpty ?? true) } : filteredBookings
+        initialStage == .painted ? filteredBookings.filter { $0.paintedFlag == nil && !($0.photos?.isEmpty ?? true) } : filteredBookings
     }
 
     var noPhotoBookings: [Booking] {
-        initialStage == .painted ? filteredBookings.filter { $0.photos?.isEmpty ?? true } : []
+        initialStage == .painted ? filteredBookings.filter { $0.paintedFlag == nil && ($0.photos?.isEmpty ?? true) } : []
     }
 
     var groupedByDate: [(date: String, bookings: [Booking])] {
@@ -152,7 +162,8 @@ struct CollectionsView: View {
             },
             onRemoveLastTag: { booking, photoIndex in
                 removeLastTag(bookingId: booking.id, photoIndex: photoIndex)
-            }
+            },
+            onSetPaintedFlag: { booking, flag in setPaintedFlag(booking, flag) }
         )
     }
 
@@ -268,6 +279,103 @@ struct CollectionsView: View {
         )
     }
 
+    /// Paints the rush / return-to-finish flag via a partial patch.
+    private func setPaintedFlag(_ booking: Booking, _ flag: String?) {
+        guard let staff = authVM.staff else { return }
+        Haptics.light()
+        var updated = bookingsVM.bookings.first(where: { $0.id == booking.id }) ?? booking
+        updated.paintedFlag = flag
+        Task {
+            await bookingsVM.patchBooking(
+                id: booking.id, studio: booking.studio,
+                fields: ["paintedFlag": flag ?? NSNull()],
+                updated: updated, staff: staff
+            )
+        }
+    }
+
+    /// Flat card grid for the painted flag buckets (rush / return-to-finish).
+    @ViewBuilder
+    private func flagCardGrid(_ bookings: [Booking]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            ForEach(bookings) { booking in
+                CollectionCard(
+                    booking: booking,
+                    stage: initialStage,
+                    onTap: {
+                        if selectMode { toggleSelection(booking.id) } else { selectedBooking = booking }
+                    },
+                    onAddPhoto: {
+                        selectedBooking = booking
+                        showCamera = true
+                    },
+                    onMove: moveToStage,
+                    onReadyPrompt: {
+                        pendingMoveBooking = booking
+                        showingReadyPrompt = true
+                    },
+                    selectMode: selectMode,
+                    isSelected: selectedIds.contains(booking.id),
+                    onToggleSelect: { toggleSelection(booking.id) },
+                    onTagPhoto: { photoIndex, xPct, yPct in
+                        addTagToPhoto(bookingId: booking.id, photoIndex: photoIndex, x: xPct, y: yPct)
+                    },
+                    onRemoveLastTag: { photoIndex in
+                        removeLastTag(bookingId: booking.id, photoIndex: photoIndex)
+                    },
+                    onSetPaintedFlag: { b, flag in setPaintedFlag(b, flag) }
+                )
+            }
+        }
+    }
+
+    /// Collapsible painted flag bucket (rush pinned top, return pinned bottom).
+    @ViewBuilder
+    private func flagBucket(title: String, icon: String, bookings: [Booking], expanded: Bool, tint: Color, onToggle: @escaping () -> Void) -> some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation { onToggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(AppFont.body(12, weight: .bold))
+                        .foregroundStyle(tint)
+                    HStack(spacing: 5) {
+                        Image(systemName: icon)
+                            .font(AppFont.body(12, weight: .bold))
+                        Text(title)
+                            .font(AppFont.heading(13))
+                            .textCase(.uppercase)
+                            .tracking(0.5)
+                    }
+                    .foregroundStyle(tint)
+                    Text("\(bookings.count) booking\(bookings.count != 1 ? "s" : "")")
+                        .font(AppFont.heading(10))
+                        .foregroundStyle(tint.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(tint.opacity(0.15))
+                        .clipShape(Capsule())
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                flagCardGrid(bookings)
+                    .padding(10)
+            }
+        }
+        .background(tint.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(tint.opacity(0.4), lineWidth: 1)
+        )
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -287,6 +395,16 @@ struct CollectionsView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 10) {
+                            // Painted: RUSH bucket pinned above the month groups
+                            if initialStage == .painted && !rushBookings.isEmpty {
+                                flagBucket(
+                                    title: "Rush", icon: "bolt.fill",
+                                    bookings: rushBookings, expanded: showRushGroup,
+                                    tint: Color(red: 0.85, green: 0.55, blue: 0.1),
+                                    onToggle: { showRushGroup.toggle() }
+                                )
+                            }
+
                             ForEach(groupedByMonth, id: \.month) { monthGroup in
                                 monthSection(monthGroup)
                             }
@@ -334,6 +452,16 @@ struct CollectionsView: View {
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
                                         .stroke(PPBrand.charcoal.opacity(0.1), lineWidth: 1)
+                                )
+                            }
+
+                            // Painted: return-to-finish bucket at the very bottom
+                            if initialStage == .painted && !returnBookings.isEmpty {
+                                flagBucket(
+                                    title: "Return to finish", icon: "arrow.uturn.backward",
+                                    bookings: returnBookings, expanded: showReturnGroup,
+                                    tint: Color(red: 0.15, green: 0.5, blue: 0.8),
+                                    onToggle: { showReturnGroup.toggle() }
                                 )
                             }
                         }
@@ -950,6 +1078,7 @@ struct CollectionCard: View {
     var onToggleSelect: (() -> Void)? = nil
     var onTagPhoto: ((Int, Double, Double) -> Void)? = nil  // photoIndex, xPct, yPct
     var onRemoveLastTag: ((Int) -> Void)? = nil  // photoIndex
+    var onSetPaintedFlag: ((Booking, String?) -> Void)? = nil
 
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var bookingsVM: BookingsViewModel
@@ -1063,6 +1192,32 @@ struct CollectionCard: View {
                     .font(AppFont.body(14, weight: .black))
                     .foregroundStyle(PPBrand.charcoal)
                     .lineLimit(1)
+                if booking.paintedFlag == "rush" {
+                    HStack(spacing: 2) {
+                        Image(systemName: "bolt.fill")
+                            .font(AppFont.body(8, weight: .bold))
+                        Text("Rush")
+                            .font(AppFont.body(8, weight: .black))
+                    }
+                    .foregroundStyle(Color(red: 0.75, green: 0.45, blue: 0.05))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color(red: 1.0, green: 0.94, blue: 0.8))
+                    .clipShape(Capsule())
+                }
+                if booking.paintedFlag == "return_to_finish" {
+                    HStack(spacing: 2) {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(AppFont.body(8, weight: .bold))
+                        Text("Return")
+                            .font(AppFont.body(8, weight: .black))
+                    }
+                    .foregroundStyle(Color(red: 0.15, green: 0.45, blue: 0.75))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color(red: 0.85, green: 0.93, blue: 1.0))
+                    .clipShape(Capsule())
+                }
                 Spacer()
                 if photoCount > 0 {
                     HStack(spacing: 3) {
@@ -1407,6 +1562,39 @@ struct CollectionCard: View {
 
             // Action buttons row (matches web)
             HStack(spacing: 6) {
+                // ⋯ menu: rush service / return to finish (painted only)
+                if stage == .painted, let onSetPaintedFlag {
+                    Menu {
+                        Button {
+                            onSetPaintedFlag(booking, "rush")
+                        } label: {
+                            Label("Rush service", systemImage: "bolt.fill")
+                        }
+                        Button {
+                            onSetPaintedFlag(booking, "return_to_finish")
+                        } label: {
+                            Label("Return to finish", systemImage: "arrow.uturn.backward")
+                        }
+                        if booking.paintedFlag != nil {
+                            Divider()
+                            Button(role: .destructive) {
+                                onSetPaintedFlag(booking, nil)
+                            } label: {
+                                Label("Remove flag", systemImage: "xmark")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(AppFont.body(10, weight: .bold))
+                            .foregroundStyle(PPBrand.charcoal)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color.white)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(PPBrand.charcoal.opacity(0.15), lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+
                 // Add Photo button
                 Button {
                     onAddPhoto?()
@@ -1558,6 +1746,7 @@ struct CollapsibleDateSection: View {
     var onReadyPrompt: ((Booking) -> Void)? = nil
     var onTagPhoto: ((Booking, Int, Double, Double) -> Void)? = nil  // booking, photoIndex, xPct, yPct
     var onRemoveLastTag: ((Booking, Int) -> Void)? = nil  // booking, photoIndex
+    var onSetPaintedFlag: ((Booking, String?) -> Void)? = nil
 
     private var photoCount: Int {
         bookings.reduce(0) { $0 + ($1.photos?.count ?? 0) }
@@ -1634,7 +1823,8 @@ struct CollapsibleDateSection: View {
                             } : nil,
                             onRemoveLastTag: onRemoveLastTag != nil ? { photoIndex in
                                 onRemoveLastTag?(booking, photoIndex)
-                            } : nil
+                            } : nil,
+                            onSetPaintedFlag: onSetPaintedFlag
                         )
                             .contextMenu {
                                 if stage == .painted {

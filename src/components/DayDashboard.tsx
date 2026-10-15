@@ -61,6 +61,7 @@ function BookingCard({
   booking,
   column,
   canUpdate,
+  showStudio,
   onMove,
   onNoShow,
   onCancel,
@@ -69,6 +70,7 @@ function BookingCard({
   booking: BookingInquiry;
   column: 'bookings' | 'seated' | 'complete' | 'noshow';
   canUpdate: boolean;
+  showStudio: boolean;
   onMove: (id: string, direction: 'forward' | 'back') => void;
   onNoShow?: (id: string) => void;
   onCancel?: (id: string) => void;
@@ -98,7 +100,7 @@ function BookingCard({
           <div className="flex items-center gap-2 mt-1.5 text-[10px] font-semibold text-[#1B2D3C]/70">
             <span className="flex items-center gap-0.5"><Users className="w-3 h-3" />{booking.paintersCount}</span>
             <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{booking.time}</span>
-            <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{booking.studio}</span>
+            {showStudio && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{booking.studio}</span>}
           </div>
         </div>
       </div>
@@ -288,6 +290,8 @@ export default function DayDashboard({
 
   const activeDayBookings = dayBookings.filter(b => b.status !== 'no_show');
   const totalSeats = activeDayBookings.reduce((s, b) => s + b.paintersCount, 0);
+  // Studio tag only earns its space when cards can come from both locations
+  const showStudio = new Set(dayBookings.map(b => b.studio)).size > 1;
 
   const handleMove = (id: string, direction: 'forward' | 'back') => {
     const booking = bookings.find(b => b.id === id);
@@ -369,6 +373,7 @@ export default function DayDashboard({
                 booking={b}
                 column="bookings"
                 canUpdate={canUpdateStatus}
+                showStudio={showStudio}
                 onMove={handleMove}
                 onNoShow={handleNoShow}
                 onCancel={handleCancel}
@@ -393,6 +398,7 @@ export default function DayDashboard({
                 booking={b}
                 column="seated"
                 canUpdate={canUpdateStatus}
+                showStudio={showStudio}
                 onMove={handleMove}
                 onClick={setSelectedBooking}
               />
@@ -415,6 +421,7 @@ export default function DayDashboard({
                 booking={b}
                 column="complete"
                 canUpdate={canUpdateStatus}
+                showStudio={showStudio}
                 onMove={handleMove}
                 onClick={setSelectedBooking}
               />
@@ -437,6 +444,7 @@ export default function DayDashboard({
                 booking={b}
                 column="noshow"
                 canUpdate={canUpdateStatus}
+                showStudio={showStudio}
                 onMove={handleMove}
                 onClick={setSelectedBooking}
               />

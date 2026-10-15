@@ -2823,13 +2823,6 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               }}
             />
             <button
-              onClick={() => openRedeemModal(undefined, true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#DBE7E4] hover:bg-[#D6E2E9] text-[#1B2D3C] text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px] border border-[#1B2D3C]/10"
-              title="Scan QR code to redeem gift card"
-            >
-              <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Redeem Card</span><span className="sm:hidden">Redeem</span>
-            </button>
-            <button
               onClick={() => {
                 localStorage.setItem('pp_activate_edit_mode', '1');
                 window.open('/', '_blank');
@@ -2904,6 +2897,15 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 )}
               </button>
             ))}
+
+            {/* Redeem Card — opens the scanner/redeem modal, styled like a tab */}
+            <button
+              onClick={() => openRedeemModal(undefined, true)}
+              className="relative shrink-0 px-4 py-3 text-xs font-bold tracking-wide border-b-2 border-transparent text-[#1B2D3C]/50 hover:text-[#1B2D3C] transition-all cursor-pointer flex items-center gap-2"
+              title="Scan QR code to redeem gift card"
+            >
+              <ScanLine className="w-3.5 h-3.5" /> Redeem Card
+            </button>
 
             {/* Logs dropdown */}
             {canManageStaff && (

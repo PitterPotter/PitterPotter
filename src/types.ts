@@ -33,7 +33,7 @@ export interface BookingInquiry {
   status: 'pending' | 'confirmed' | 'seated' | 'completed' | 'cancelled' | 'no_show';
   requestDate: string;
   estimatedPrice?: number;
-  source?: 'online' | 'walk-in';
+  source?: 'online' | 'walk-in' | 'block';
   giftCardCode?: string;
   giftCardDiscount?: number;
   finalPrice?: number;

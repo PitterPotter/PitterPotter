@@ -399,7 +399,7 @@ export default function WimbledonFloorPlan({
     return bookings
       .filter(b => b.date === selectedDate && b.studio === 'Wimbledon' && (b.status === 'pending' || b.status === 'confirmed') && (!selectedTime || (b.time && overlapsTwoHours(b.time, selectedTime))))
       .sort(byTimeThenName)
-      .map(b => ({ id: b.id, name: firstName(b.name), painters: b.paintersCount, time: b.time, tableId: b.tableId }));
+      .map(b => ({ id: b.id, name: firstName(b.name), painters: b.paintersCount, time: b.time, tableId: b.tableId, isBlock: b.source === 'block' }));
   }, [bookings, selectedDate, selectedTime]);
 
   const seatedLegend = useMemo(() => {
@@ -648,7 +648,7 @@ export default function WimbledonFloorPlan({
               {bookingLegend.map((b, i) => (
                 <div
                   key={i}
-                  className={`w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-md text-[11px] font-semibold text-[#1B2D3C] ${pendingAssignId === b.id ? 'bg-emerald-100' : 'hover:bg-[#1B2D3C]/5'} ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
+                  className={`w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-md text-[11px] font-semibold ${b.isBlock ? 'text-red-700 bg-red-50' : 'text-[#1B2D3C]'} ${pendingAssignId === b.id ? 'bg-emerald-100' : 'hover:bg-[#1B2D3C]/5'} ${onMoveBooking ? 'cursor-grab' : 'cursor-pointer'}`}
                   draggable={!!onMoveBooking}
                   onDragStart={onMoveBooking ? (e) => e.dataTransfer.setData('text/plain', b.id) : undefined}
                   onClick={() => {

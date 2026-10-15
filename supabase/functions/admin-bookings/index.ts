@@ -891,7 +891,7 @@ Deno.serve(async (req) => {
         phone: '',
         session_type: 'painting',
         status: 'confirmed',
-        source: 'walk-in',
+        source: 'block',
         painters_count: openCap,
         notes: 'Studio block — reserves every table for the window. Delete this booking to unblock.',
         management_token: crypto.randomUUID(),

@@ -6,7 +6,7 @@ import WimbledonFloorPlan from './WimbledonFloorPlan';
 import PutneyFloorPlan from './PutneyFloorPlan';
 import { allocateResources as allocateResourcesFromBookings, formatResources, isPartySessionType } from '../lib/allocation';
 import { findAvailablePutneyTable, findMultiplePutneyTables } from './PutneyFloorPlan';
-import { Calendar, Clock, Users, Mail, Phone, LogOut, Trash2, CheckCircle, XCircle, Plus, Copy, Inbox, Gift, ChevronUp, ChevronDown, X as XIcon, Pencil, Lock, Camera, ScanLine, AlertCircle, Package, Check, Wine, Loader2, MapPin } from 'lucide-react';
+import { Calendar, Clock, Users, Mail, Phone, LogOut, Trash2, CheckCircle, XCircle, Plus, Copy, Inbox, Gift, ChevronUp, ChevronDown, X as XIcon, Pencil, Lock, Camera, ScanLine, AlertCircle, Package, Check, Wine, Loader2, MapPin, Ban } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
 import { format, isSameDay, parseISO, getDay } from 'date-fns';
 import { BookingInquiry, GiftCard, Staff, AuditLog, GiftCardApiRow, StaffApiRow, EmailTemplate, SMSTemplate, EmailLog } from '../types';
@@ -199,6 +199,14 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [newBookingDepositAmount, setNewBookingDepositAmount] = useState<string>('50');
   const [newBookingFinalPending, setNewBookingFinalPending] = useState<boolean>(true);
   const [showGhostModal, setShowGhostModal] = useState(false);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockDraft, setBlockDraft] = useState<{ studio: 'Putney' | 'Wimbledon'; date: string; startTime: string; endTime: string; label: string }>({
+    studio: 'Wimbledon',
+    date: new Date().toISOString().split('T')[0],
+    startTime: '10:00',
+    endTime: '12:00',
+    label: 'Studio Block',
+  });
   const [ghostBooking, setGhostBooking] = useState({ seats: 1, studio: defaultStudio });
   const [ghostCapacity, setGhostCapacity] = useState<number | null>(null);
   const [ghostConflict, setGhostConflict] = useState<string | null>(null);
@@ -1447,11 +1455,11 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     }
   };
 
-  const handleBlockStudio = async (startTime: string, endTime: string, label: string) => {
+  const handleBlockStudio = async (studio: 'Putney' | 'Wimbledon', date: string, startTime: string, endTime: string, label: string) => {
     try {
-      await blockStudio(effectiveFloorPlanStudio, floorPlanDate, startTime, endTime, label, staff);
+      await blockStudio(studio, date, startTime, endTime, label, staff);
       await loadInquiries();
-      showToast(`${label} — ${effectiveFloorPlanStudio} blocked ${startTime}–${endTime}. Cancel the "${label}" booking to unblock.`, 'success');
+      showToast(`${label} — ${studio} blocked ${startTime}–${endTime}. Cancel the "${label}" booking to unblock.`, 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to block studio', 'error');
     }
@@ -2785,6 +2793,21 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 </button>
               </>
             )}
+            {canEdit && (
+              <button
+                onClick={() => {
+                  setBlockDraft(prev => ({
+                    ...prev,
+                    studio: studioFilter !== 'all' ? studioFilter : (staff.allowedStudios?.[0] ?? 'Wimbledon'),
+                    date: floorPlanDate,
+                  }));
+                  setShowBlockModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px]"
+              >
+                <Ban className="w-4 h-4" /> <span className="hidden sm:inline">Block Studio</span><span className="sm:hidden">Block</span>
+              </button>
+            )}
             <NotificationBell
               staff={staff}
               studioFilter={studioFilter}
@@ -3398,6 +3421,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                       <span>{inq.time}</span>
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#D6E2E9] text-[#1B2D3C] rounded-full text-[10px] font-black"><Users className="w-2.5 h-2.5" />{inq.paintersCount}</span>
                       {inq.source === 'walk-in' && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold">Walk-in</span>}
+                      {inq.source === 'block' && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-bold">Block</span>}
                       {tablePlanEnabled && inq.tableId && <span className="px-1.5 py-0.5 bg-[#DBE7E4] text-[#1B2D3C] rounded-full text-[10px] font-bold">{inq.tableId}</span>}
                     </div>
                     {inq.photos && inq.photos.length > 0 && (
@@ -3493,6 +3517,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#D6E2E9] text-[#1B2D3C] rounded-full text-[10px] font-black"><Users className="w-2.5 h-2.5" />{inq.paintersCount}</span>
                             {inq.source === 'walk-in' && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold">Walk-in</span>}
+                      {inq.source === 'block' && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-bold">Block</span>}
                           </div>
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell">
@@ -3647,7 +3672,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   readOnly
                   onMoveBooking={(bookingId, tableId) => updateBookingTable(bookingId, tableId)}
                   onSeatBooking={canUpdateStatus ? (bookingId) => updateStatus(bookingId, 'seated') : undefined}
-                  onBlockStudio={canEdit ? handleBlockStudio : undefined}
+                  onBlockStudio={canEdit ? (s, e, l) => handleBlockStudio('Wimbledon', floorPlanDate, s, e, l) : undefined}
                 />
               ) : (
                 <PutneyFloorPlan
@@ -3656,7 +3681,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   readOnly
                   onMoveBooking={(bookingId, tableId) => updateBookingTable(bookingId, tableId)}
                   onSeatBooking={canUpdateStatus ? (bookingId) => updateStatus(bookingId, 'seated') : undefined}
-                  onBlockStudio={canEdit ? handleBlockStudio : undefined}
+                  onBlockStudio={canEdit ? (s, e, l) => handleBlockStudio('Putney', floorPlanDate, s, e, l) : undefined}
                 />
               )}
             </div>
@@ -4254,6 +4279,87 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 className="flex-1 px-4 py-2 bg-[#1B2D3C] text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-[#486581] transition-all cursor-pointer"
               >
                 Block Seats
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Block Studio Modal — reserves every table for the window so online bookings are refused */}
+      {showBlockModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 sm:p-6">
+          <div className="bg-white p-6 border border-[#1B2D3C]/20 max-w-sm w-full space-y-4 shadow-lg max-h-[90vh] overflow-y-auto sm:rounded-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading text-xl font-black text-[#1B2D3C]">Block Studio</h3>
+              <button onClick={() => setShowBlockModal(false)} className="p-1.5 rounded-full hover:bg-[#D6E2E9] transition-colors cursor-pointer">
+                <XIcon className="w-5 h-5 text-[#1B2D3C]/60" />
+              </button>
+            </div>
+            <p className="text-[10px] text-[#1B2D3C]/60 font-semibold">
+              Reserves every table for the window — online bookings are refused. Cancel the block booking to unblock.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Studio *</label>
+                <select
+                  value={blockDraft.studio}
+                  onChange={(e) => setBlockDraft({ ...blockDraft, studio: e.target.value as 'Putney' | 'Wimbledon' })}
+                  className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20 bg-white"
+                >
+                  {(isSuperAdmin || !staff.allowedStudios?.length ? ['Putney', 'Wimbledon'] : staff.allowedStudios).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Date *</label>
+                <input
+                  type="date"
+                  value={blockDraft.date}
+                  onChange={(e) => setBlockDraft({ ...blockDraft, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20 bg-white"
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">From *</label>
+                  <input
+                    type="time"
+                    value={blockDraft.startTime}
+                    onChange={(e) => setBlockDraft({ ...blockDraft, startTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20 bg-white"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">To *</label>
+                  <input
+                    type="time"
+                    value={blockDraft.endTime}
+                    onChange={(e) => setBlockDraft({ ...blockDraft, endTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20 bg-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider mb-1">Label</label>
+                <input
+                  type="text"
+                  value={blockDraft.label}
+                  onChange={(e) => setBlockDraft({ ...blockDraft, label: e.target.value })}
+                  placeholder="Studio Block"
+                  className="w-full px-3 py-2 border border-[#1B2D3C]/20 text-xs text-[#1B2D3C] font-bold rounded-lg focus:outline-none focus:bg-[#D6E2E9]/20"
+                />
+              </div>
+              <button
+                onClick={async () => {
+                  if (!blockDraft.date || !blockDraft.startTime || !blockDraft.endTime) { showToast('Date and times are required', 'error'); return; }
+                  if (blockDraft.endTime <= blockDraft.startTime) { showToast('End time must be after start time', 'error'); return; }
+                  await handleBlockStudio(blockDraft.studio, blockDraft.date, blockDraft.startTime, blockDraft.endTime, blockDraft.label.trim() || 'Studio Block');
+                  setShowBlockModal(false);
+                }}
+                className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Block Studio
               </button>
             </div>
           </div>

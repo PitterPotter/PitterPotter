@@ -103,6 +103,15 @@ function BookingCard({
           <div className="flex items-center gap-2 mt-1.5 text-[10px] font-semibold text-[#1B2D3C]/70">
             <span className="flex items-center gap-0.5"><Users className="w-3 h-3" />{booking.paintersCount}</span>
             <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{booking.time}</span>
+            {canUpdate && onAddPhoto && (column === 'seated' || column === 'complete') && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onAddPhoto(booking); }}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 -my-0.5 bg-[#DBE7E4] hover:bg-[#D6E2E9] border border-[#1B2D3C]/10 text-[#1B2D3C] text-[9px] font-bold uppercase tracking-wider rounded transition-colors cursor-pointer"
+                title="Add photos to this booking"
+              >
+                <Camera className="w-3 h-3" /> Photo
+              </button>
+            )}
             {showStudio && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{booking.studio}</span>}
           </div>
         </div>
@@ -145,14 +154,7 @@ function BookingCard({
               <X className="w-3 h-3" /> Cancel
             </button>
           )}
-          {column === 'seated' && onAddPhoto && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onAddPhoto(booking); }}
-              className="flex items-center gap-0.5 px-2 py-1 bg-[#DBE7E4] hover:bg-[#D6E2E9] border border-[#1B2D3C]/10 text-[#1B2D3C] text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
-            >
-              <Camera className="w-3 h-3" /> Photo
-            </button>
-          )}
+
           {column !== 'complete' && column !== 'noshow' && (
             <button
               onClick={(e) => { e.stopPropagation(); onMove(booking.id, 'forward'); }}
@@ -443,6 +445,7 @@ export default function DayDashboard({
                 canUpdate={canUpdateStatus}
                 showStudio={showStudio}
                 onMove={handleMove}
+                onAddPhoto={handleAddPhoto}
                 onClick={setSelectedBooking}
               />
             ))

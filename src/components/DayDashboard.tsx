@@ -356,8 +356,8 @@ export default function DayDashboard({
         <StatBubble label="No-Show" value={noshowColumn.length} colour="red" />
       </div>
 
-      {/* 4-column kanban */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* 3-column kanban — no-shows are rare; the count stays in the stat bubble */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Bookings column (left) — light red */}
         <div className="bg-rose-50/50 border border-rose-200/60 rounded-xl p-4 space-y-3 min-h-[300px]">
           <div className="flex items-center justify-between">
@@ -429,28 +429,6 @@ export default function DayDashboard({
           )}
         </div>
 
-        {/* No-Show column (far right) — light stone */}
-        <div className="bg-stone-50/50 border border-stone-300/60 rounded-xl p-4 space-y-3 min-h-[300px]">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-black text-stone-700 uppercase tracking-wider">No-Show</h3>
-            <span className="px-2 py-0.5 bg-stone-300/60 text-stone-700 text-[10px] font-black rounded-full">{noshowColumn.length}</span>
-          </div>
-          {noshowColumn.length === 0 ? (
-            <p className="text-xs text-stone-400/60 font-semibold text-center py-8">No no-shows</p>
-          ) : (
-            noshowColumn.map(b => (
-              <BookingCard
-                key={b.id}
-                booking={b}
-                column="noshow"
-                canUpdate={canUpdateStatus}
-                showStudio={showStudio}
-                onMove={handleMove}
-                onClick={setSelectedBooking}
-              />
-            ))
-          )}
-        </div>
       </div>
 
       {/* Booking detail modal */}

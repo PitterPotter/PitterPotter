@@ -1774,11 +1774,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     setShowEditModal(true);
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !editingBooking) return;
-    const fileArr = Array.from(files);
-    e.target.value = '';
+  const uploadPhotosToBooking = async (booking: BookingInquiry, fileArr: File[]): Promise<BookingInquiry | null> => {
+    if (fileArr.length === 0) return null;
     setPhotoUploading(true);
     try {
       const newPhotoUrls: string[] = [];
@@ -1789,7 +1786,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           const uploadRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-content`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-            body: JSON.stringify({ action: 'upload', username: staff.username, sessionToken: staff.sessionToken, key: `booking_${editingBooking.id}_photo_${Date.now()}`, page: 'booking-photos', fileData: dataUrl, fileName: file.name }),
+            body: JSON.stringify({ action: 'upload', username: staff.username, sessionToken: staff.sessionToken, key: `booking_${booking.id}_photo_${Date.now()}`, page: 'booking-photos', fileData: dataUrl, fileName: file.name }),
           });
           const uploadData = await uploadRes.json();
           if (!uploadRes.ok || uploadData.error || !uploadData.url) {
@@ -1799,17 +1796,26 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
         }
         newPhotoUrls.push(imageUrl);
       }
-      const updatedBooking = { ...editingBooking, photos: [...(editingBooking.photos || []), ...newPhotoUrls] };
-      setEditingBooking(updatedBooking);
+      const updatedBooking = { ...booking, photos: [...(booking.photos || []), ...newPhotoUrls] };
       await updateBooking(updatedBooking, staff);
       setInquiries(inquiries.map((i) => i.id === updatedBooking.id ? updatedBooking : i));
       showToast(`${newPhotoUrls.length} photo${newPhotoUrls.length > 1 ? 's' : ''} added`, 'success');
+      return updatedBooking;
     } catch (err) {
       console.error('Failed to upload photo:', err);
       showToast('Failed to upload photo', 'error');
+      return null;
     } finally {
       setPhotoUploading(false);
     }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !editingBooking) return;
+    e.target.value = '';
+    const updated = await uploadPhotosToBooking(editingBooking, Array.from(files));
+    if (updated) setEditingBooking(updated);
   };
 
   const handleDeletePhoto = async (index: number) => {
@@ -3205,6 +3211,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           onUpdateStatus={(id, status) => updateStatus(id, status)}
           onEditBooking={(booking) => handleEditBooking(booking)}
           onAddWalkIn={() => setShowGhostModal(true)}
+          onUploadPhoto={(booking, files) => { uploadPhotosToBooking(booking, files); }}
           canUpdateStatus={canUpdateStatus}
           canAddWalkIn={canAddWalkIn}
         />

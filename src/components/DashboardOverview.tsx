@@ -14,6 +14,7 @@ interface DashboardOverviewProps {
   onUpdateStatus?: (id: string, status: BookingInquiry['status']) => void;
   onEditBooking?: (booking: BookingInquiry) => void;
   onAddWalkIn?: () => void;
+  onUploadPhoto?: (booking: BookingInquiry, files: File[]) => void;
   canUpdateStatus?: boolean;
   canAddWalkIn?: boolean;
 }
@@ -27,6 +28,7 @@ export default function DashboardOverview({
   onUpdateStatus,
   onEditBooking,
   onAddWalkIn,
+  onUploadPhoto,
   canUpdateStatus,
   canAddWalkIn,
 }: DashboardOverviewProps) {
@@ -43,6 +45,7 @@ export default function DashboardOverview({
           onUpdateStatus={(id, status) => onUpdateStatus?.(id, status)}
           onEditBooking={(booking) => onEditBooking?.(booking)}
           onAddWalkIn={() => onAddWalkIn?.()}
+          onUploadPhoto={onUploadPhoto}
           onAddBooking={(sessionType) => onNavigateToAddBooking?.({ date: selectedDate, sessionType })}
           canUpdateStatus={canUpdateStatus ?? false}
           canAddWalkIn={canAddWalkIn ?? false}

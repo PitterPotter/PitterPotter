@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Users, CheckCircle, Clock, MapPin, Phone, Mail, Gift,
-  FileText, X, ChevronRight, ChevronLeft, UserCheck,
+  FileText, X, ChevronRight, ChevronLeft, UserCheck, Camera,
 } from 'lucide-react';
 import { BookingInquiry } from '../types';
 
@@ -14,6 +14,7 @@ interface DayDashboardProps {
   onEditBooking: (booking: BookingInquiry) => void;
   onAddWalkIn: () => void;
   onAddBooking: (sessionType: string) => void;
+  onUploadPhoto?: (booking: BookingInquiry, files: File[]) => void;
   canUpdateStatus: boolean;
   canAddWalkIn: boolean;
 }
@@ -65,6 +66,7 @@ function BookingCard({
   onMove,
   onNoShow,
   onCancel,
+  onAddPhoto,
   onClick,
 }: {
   booking: BookingInquiry;
@@ -74,6 +76,7 @@ function BookingCard({
   onMove: (id: string, direction: 'forward' | 'back') => void;
   onNoShow?: (id: string) => void;
   onCancel?: (id: string) => void;
+  onAddPhoto?: (booking: BookingInquiry) => void;
   onClick: (booking: BookingInquiry) => void;
 }) {
   return (
@@ -140,6 +143,14 @@ function BookingCard({
               className="flex items-center gap-0.5 px-2 py-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-3 h-3" /> Cancel
+            </button>
+          )}
+          {column === 'seated' && onAddPhoto && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onAddPhoto(booking); }}
+              className="flex items-center gap-0.5 px-2 py-1 bg-[#DBE7E4] hover:bg-[#D6E2E9] border border-[#1B2D3C]/10 text-[#1B2D3C] text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+            >
+              <Camera className="w-3 h-3" /> Photo
             </button>
           )}
           {column !== 'complete' && column !== 'noshow' && (
@@ -271,6 +282,7 @@ export default function DayDashboard({
   onBack,
   onUpdateStatus,
   onEditBooking,
+  onUploadPhoto,
   canUpdateStatus,
 }: DayDashboardProps) {
   const [selectedBooking, setSelectedBooking] = useState<BookingInquiry | null>(null);
@@ -315,6 +327,13 @@ export default function DayDashboard({
 
   const handleNoShow = (id: string) => {
     onUpdateStatus(id, 'no_show');
+  };
+
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const photoTarget = useRef<BookingInquiry | null>(null);
+  const handleAddPhoto = (booking: BookingInquiry) => {
+    photoTarget.current = booking;
+    photoInputRef.current?.click();
   };
 
   const handleCancel = (id: string) => {
@@ -400,6 +419,7 @@ export default function DayDashboard({
                 canUpdate={canUpdateStatus}
                 showStudio={showStudio}
                 onMove={handleMove}
+                onAddPhoto={handleAddPhoto}
                 onClick={setSelectedBooking}
               />
             ))
@@ -430,6 +450,21 @@ export default function DayDashboard({
         </div>
 
       </div>
+
+      {/* Hidden photo picker — seated cards' Photo button targets this */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const target = photoTarget.current;
+          if (target && e.target.files?.length) onUploadPhoto?.(target, Array.from(e.target.files));
+          e.target.value = '';
+          photoTarget.current = null;
+        }}
+      />
 
       {/* Booking detail modal */}
       {selectedBooking && (

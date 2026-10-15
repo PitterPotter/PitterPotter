@@ -21,6 +21,10 @@ enum TableStatus {
     case free, partial, full, selected
 }
 
+private func parseTableIds(_ t: String?) -> [String] {
+    (t ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+}
+
 private func firstName(_ name: String) -> String {
     let trimmed = name.trimmingCharacters(in: .whitespaces)
     return trimmed.components(separatedBy: .whitespaces).first ?? name
@@ -53,7 +57,6 @@ private func overlapsTwoHours(_ a: String, _ b: String) -> Bool {
 // All tables render at the same size on both platforms.
 private let TABLE_W: CGFloat = 80
 private let TABLE_H: CGFloat = 52
-private let PARTY_CAPACITY = 9
 
 struct PutneyTables {
     static let main: [FloorTable] = [
@@ -116,6 +119,74 @@ struct WimbledonTables {
     static let all: [FloorTable] = main + back + party1 + party2
 }
 
+// MARK: - Auto-assign data (mirrors src/lib/allocation.ts seating rules)
+
+private let PARTY_SESSION_TYPES: Set<String> = ["birthday-party", "baby-shower-hen", "corporate"]
+
+private struct WimTableCap {
+    let id: String
+    let area: String
+    let maxCap: Int
+    let sort: Int
+}
+
+private let WIMBLEDON_TABLE_CAPS: [WimTableCap] = [
+    WimTableCap(id: "T1", area: "FRONT", maxCap: 3, sort: 1),
+    WimTableCap(id: "T2", area: "FRONT", maxCap: 5, sort: 2),
+    WimTableCap(id: "T3", area: "FRONT", maxCap: 5, sort: 3),
+    WimTableCap(id: "T4", area: "FRONT", maxCap: 5, sort: 4),
+    WimTableCap(id: "T5", area: "FRONT", maxCap: 4, sort: 5),
+    WimTableCap(id: "T6", area: "FRONT", maxCap: 2, sort: 6),
+    WimTableCap(id: "T7", area: "FRONT", maxCap: 4, sort: 7),
+    WimTableCap(id: "T8", area: "FRONT", maxCap: 2, sort: 8),
+    WimTableCap(id: "T9", area: "FRONT", maxCap: 4, sort: 9),
+    WimTableCap(id: "T10", area: "FRONT", maxCap: 3, sort: 10),
+    WimTableCap(id: "T11", area: "BACK", maxCap: 3, sort: 11),
+    WimTableCap(id: "T12", area: "BACK", maxCap: 3, sort: 12),
+    WimTableCap(id: "T13", area: "BACK", maxCap: 3, sort: 13),
+    WimTableCap(id: "T14", area: "BACK", maxCap: 5, sort: 14),
+    WimTableCap(id: "T15", area: "PARTY_AREA_1", maxCap: 5, sort: 15),
+    WimTableCap(id: "T16", area: "PARTY_AREA_1", maxCap: 5, sort: 16),
+    WimTableCap(id: "T17", area: "PARTY_AREA_2", maxCap: 5, sort: 17),
+    WimTableCap(id: "T18", area: "PARTY_AREA_2", maxCap: 5, sort: 18),
+]
+
+private struct WimCfg {
+    let tables: [String]
+    let isParty: Bool
+    let partyArea: String?
+    let minCap: Int
+    let maxCap: Int
+    let sort: Int
+}
+
+private let WIMBLEDON_CONFIGS: [WimCfg] = [
+    WimCfg(tables: ["T1"], isParty: false, partyArea: nil, minCap: 1, maxCap: 3, sort: 1),
+    WimCfg(tables: ["T2"], isParty: false, partyArea: nil, minCap: 1, maxCap: 5, sort: 2),
+    WimCfg(tables: ["T3"], isParty: false, partyArea: nil, minCap: 1, maxCap: 5, sort: 3),
+    WimCfg(tables: ["T4"], isParty: false, partyArea: nil, minCap: 1, maxCap: 5, sort: 4),
+    WimCfg(tables: ["T5"], isParty: false, partyArea: nil, minCap: 1, maxCap: 4, sort: 5),
+    WimCfg(tables: ["T6"], isParty: false, partyArea: nil, minCap: 1, maxCap: 2, sort: 6),
+    WimCfg(tables: ["T7"], isParty: false, partyArea: nil, minCap: 1, maxCap: 4, sort: 7),
+    WimCfg(tables: ["T8"], isParty: false, partyArea: nil, minCap: 1, maxCap: 2, sort: 8),
+    WimCfg(tables: ["T9"], isParty: false, partyArea: nil, minCap: 1, maxCap: 4, sort: 9),
+    WimCfg(tables: ["T10"], isParty: false, partyArea: nil, minCap: 1, maxCap: 3, sort: 10),
+    WimCfg(tables: ["T11"], isParty: false, partyArea: nil, minCap: 1, maxCap: 3, sort: 11),
+    WimCfg(tables: ["T12"], isParty: false, partyArea: nil, minCap: 1, maxCap: 3, sort: 12),
+    WimCfg(tables: ["T13"], isParty: false, partyArea: nil, minCap: 1, maxCap: 3, sort: 13),
+    WimCfg(tables: ["T14"], isParty: false, partyArea: nil, minCap: 1, maxCap: 5, sort: 14),
+    WimCfg(tables: ["T5", "T6"], isParty: false, partyArea: nil, minCap: 1, maxCap: 8, sort: 20),
+    WimCfg(tables: ["T5", "T6", "T7"], isParty: false, partyArea: nil, minCap: 1, maxCap: 12, sort: 21),
+    WimCfg(tables: ["T5", "T6", "T7", "T8"], isParty: false, partyArea: nil, minCap: 1, maxCap: 14, sort: 22),
+    WimCfg(tables: ["T9", "T10"], isParty: false, partyArea: nil, minCap: 1, maxCap: 8, sort: 23),
+    WimCfg(tables: ["T15", "T16"], isParty: true, partyArea: "PA1", minCap: 1, maxCap: 9, sort: 30),
+    WimCfg(tables: ["T13", "T15", "T16"], isParty: true, partyArea: "PA1", minCap: 1, maxCap: 12, sort: 31),
+    WimCfg(tables: ["T12", "T13", "T15", "T16"], isParty: true, partyArea: "PA1", minCap: 1, maxCap: 14, sort: 32),
+    WimCfg(tables: ["T17", "T18"], isParty: true, partyArea: "PA2", minCap: 1, maxCap: 9, sort: 40),
+    WimCfg(tables: ["T14", "T17", "T18"], isParty: true, partyArea: "PA2", minCap: 1, maxCap: 14, sort: 41),
+    WimCfg(tables: ["T12", "T13", "T14", "T15", "T16", "T17", "T18"], isParty: true, partyArea: "PA1+PA2", minCap: 15, maxCap: 28, sort: 50),
+]
+
 // MARK: - Floor Plan View
 
 struct FloorPlanView: View {
@@ -126,14 +197,22 @@ struct FloorPlanView: View {
     let highlightTableId: String?
     var onAssign: ((String) -> Void)? = nil
     var onMoveBooking: ((String, String) -> Void)? = nil
+    var onSeatBooking: ((String) -> Void)? = nil
+    var onBlockStudio: ((String, String, String) -> Void)? = nil
 
     @State private var selectedTable: String? = nil
     @State private var pendingAssign: Booking? = nil
+    @State private var pendingTables: [String] = []
+    @State private var showSeated = false
     @State private var zoomScale: CGFloat = 1.0
     @State private var lastZoomScale: CGFloat = 1.0
     @State private var panOffset: CGSize = .zero
     @State private var lastPanOffset: CGSize = .zero
     @State private var dropTarget: String? = nil
+    @State private var showBlockStudio = false
+    @State private var blockStart = "10:00"
+    @State private var blockEnd = "12:00"
+    @State private var blockLabel = "Studio Block"
 
     private var tables: [FloorTable] {
         studio == "Putney" ? PutneyTables.all : WimbledonTables.all
@@ -168,28 +247,37 @@ struct FloorPlanView: View {
         return filtered.sorted { $0.time < $1.time }
     }
 
-    // Bookings shown as chips / used for colours — overlap-filtered when a
+    // Bookings still waiting to be seated — seated/completed drop out of
+    // the sidebar like the dashboard columns. Overlap-filtered when a
     // slot is selected, sorted like the web legend.
     private var visibleBookings: [Booking] {
-        let all = dayBookings()
+        let all = dayBookings().filter { $0.status == "pending" || $0.status == "confirmed" }
         let filtered = selectedTime != nil
             ? all.filter { !$0.time.isEmpty && overlapsTwoHours($0.time, selectedTime!) }
             : all
         return filtered.sorted { $0.time == $1.time ? $0.name < $1.name : $0.time < $1.time }
     }
 
-    private var unassignedBookings: [Booking] {
-        dayBookings().filter { ($0.tableId ?? "").isEmpty }
+    // Seated parties — collapsed section at the bottom of the sidebar.
+    private var seatedBookings: [Booking] {
+        dayBookings()
+            .filter { $0.status == "seated" }
+            .sorted { $0.time == $1.time ? $0.name < $1.name : $0.time < $1.time }
     }
 
-    private func partyAreaCapacity(_ area: String) -> (used: Int, total: Int, remaining: Int) {
-        let tableIds = Set(tables.filter { $0.area == area }.map { "T\($0.id)" })
-        let used = dayBookings()
-            .filter { b in
-                (b.tableId ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.contains { tableIds.contains($0) }
+    private var unassignedBookings: [Booking] {
+        dayBookings()
+            .filter {
+                ($0.tableId ?? "").isEmpty && ($0.status == "pending" || $0.status == "confirmed")
             }
-            .reduce(0) { $0 + $1.paintersCount }
-        return (used, PARTY_CAPACITY, max(0, PARTY_CAPACITY - used))
+            .sorted { $0.time == $1.time ? $0.name < $1.name : $0.time < $1.time }
+    }
+
+    // Seat-on-drop only applies to today's plan — other dates are planning.
+    private var isToday: Bool {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return selectedDate == fmt.string(from: Date())
     }
 
     private var highlightIds: Set<String> {
@@ -243,19 +331,115 @@ struct FloorPlanView: View {
         return labels
     }
 
+    // MARK: - Auto / manual assign
+
+    // "10:00-12:00" → (600, 720); "10:00" → (600, 720) default 2h
+    private func timeWindow(_ time: String) -> (Int, Int) {
+        let parts = time.split(separator: "-").map { $0.trimmingCharacters(in: .whitespaces) }
+        let start = minutesOfDay(time)
+        let end = parts.count > 1 ? minutesOfDay(String(parts[1])) : start + 120
+        return (start, end)
+    }
+
+    private func autoAssign() {
+        guard let onMoveBooking, selectedDate != nil else { return }
+        var sim = bookings
+        let targets = dayBookings()
+            .filter { ($0.tableId ?? "").isEmpty }
+            .sorted { $0.time == $1.time ? $0.name < $1.name : $0.time < $1.time }
+        for b in targets {
+            guard let ids = studio == "Wimbledon" ? wimbledonAssign(b, in: sim) : putneyAssign(b, in: sim), !ids.isEmpty else { continue }
+            onMoveBooking(b.id, ids)
+            if let i = sim.firstIndex(where: { $0.id == b.id }) { sim[i].tableId = ids }
+        }
+    }
+
+    private func manualAssign() {
+        guard let onMoveBooking else { return }
+        for b in dayBookings() where !(b.tableId ?? "").isEmpty {
+            onMoveBooking(b.id, "")
+        }
+    }
+
+    // Wimbledon: named configurations first (party sessions → party areas,
+    // >14 → both areas), else combine free normal tables like the web engine.
+    private func wimbledonAssign(_ booking: Booking, in sim: [Booking]) -> String? {
+        let isParty = PARTY_SESSION_TYPES.contains(booking.sessionType)
+        let win = timeWindow(booking.time)
+        var busy: [(String, Int, Int)] = []
+        for ob in sim where ob.date == booking.date && ob.id != booking.id {
+            let w = timeWindow(ob.time)
+            for tid in (ob.tableId ?? "").split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) where !tid.isEmpty {
+                busy.append((tid, w.0, w.1))
+            }
+        }
+        func tableFree(_ tid: String) -> Bool {
+            !busy.contains { $0.0 == tid && win.0 < $0.2 && win.1 > $0.1 }
+        }
+        let cfgs = WIMBLEDON_CONFIGS.filter { c in
+            if isParty {
+                guard c.isParty else { return false }
+                if booking.paintersCount > 14 && c.partyArea != "PA1+PA2" { return false }
+            } else if c.isParty { return false }
+            return booking.paintersCount >= c.minCap && booking.paintersCount <= c.maxCap
+        }.sorted {
+            ($0.tables.count * 1000 + ($0.maxCap - booking.paintersCount)) < ($1.tables.count * 1000 + ($1.maxCap - booking.paintersCount))
+        }
+        if let best = cfgs.first(where: { $0.tables.allSatisfy(tableFree) }) {
+            return best.tables.joined(separator: ", ")
+        }
+        // Fallback: combine free tables — fewest tables, least waste, then
+        // adjacent; party-area tables only when nothing else works.
+        guard !isParty else { return nil }
+        let freeTables = WIMBLEDON_TABLE_CAPS.filter { tableFree($0.id) }
+        var best: [WimTableCap]?
+        var bestScore = Int.max
+        var combo: [WimTableCap] = []
+        func search(_ s: Int, _ k: Int) {
+            if k == 0 {
+                let cap = combo.reduce(0) { $0 + $1.maxCap }
+                guard cap >= booking.paintersCount else { return }
+                let orders = combo.map(\.sort)
+                let span = (orders.max() ?? 0) - (orders.min() ?? 0)
+                let partyCount = combo.filter { $0.area.hasPrefix("PARTY_AREA") }.count
+                let score = (cap - booking.paintersCount) * 1000 + span * 10 + partyCount
+                if score < bestScore { bestScore = score; best = combo }
+                return
+            }
+            guard freeTables.count - s >= k else { return }
+            for i in s...(freeTables.count - k) {
+                combo.append(freeTables[i])
+                search(i + 1, k - 1)
+                combo.removeLast()
+            }
+        }
+        for k in 1...min(4, freeTables.count) where best == nil { search(0, k) }
+        return best?.map(\.id).joined(separator: ", ")
+    }
+
+    // Putney: party bookings take party tables; others take any free table,
+    // filling until the party is seated (mirrors findMultiplePutneyTables).
+    private func putneyAssign(_ booking: Booking, in sim: [Booking]) -> String? {
+        let pool = booking.sessionType.contains("party") ? PutneyTables.party : PutneyTables.all
+        let assigned = Set(sim.filter { ob in
+            ob.date == booking.date && !ob.time.isEmpty && overlapsTwoHours(ob.time, booking.time) && !(ob.tableId ?? "").isEmpty
+        }.flatMap { ($0.tableId ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } })
+        var result: [String] = []
+        var seated = 0
+        for t in pool where seated < booking.paintersCount {
+            let tid = "T\(t.id)"
+            guard !assigned.contains(tid) else { continue }
+            result.append(tid)
+            seated += t.seats
+        }
+        return result.isEmpty ? nil : result.joined(separator: ", ")
+    }
+
     var body: some View {
         VStack(spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(studio) Studio")
-                        .font(AppFont.heading(16))
-                        .foregroundStyle(PPBrand.charcoal)
-                    Text(studio == "Putney" ? "10 tables · 234 Upper Richmond Road, London, SW15 6TG" : "18 tables · 52 Wimbledon Hill Road, London, SW19 7PA")
-                        .font(AppFont.body(10))
-                        .foregroundStyle(PPBrand.charcoal.opacity(0.5))
-                }
-                Spacer()
-                if let sel = selectedTable {
+            if let sel = selectedTable {
+                HStack {
+                    Spacer()
                     let table = tables.first { "T\($0.id)" == sel }
                     Text("\(sel) selected · \(table?.seats ?? 0) seats")
                         .font(AppFont.body(11, weight: .bold))
@@ -267,14 +451,16 @@ struct FloorPlanView: View {
                 }
             }
 
-            // Pending assign banner — tap mode alternative to drag & drop
+            // Pending assign banner — tap mode alternative to drag & drop.
+            // Each tapped table toggles on/off until Done, so a booking can
+            // span several tables (e.g. T5, T6).
             if let pending = pendingAssign {
                 HStack {
-                    Text("Assigning \(firstName(pending.name)) — tap a table")
+                    Text("Assigning \(firstName(pending.name))\(pendingTables.isEmpty ? "" : " → \(pendingTables.joined(separator: ", "))") — tap or drop tables to add/remove")
                         .font(AppFont.body(11, weight: .bold))
                         .foregroundStyle(Color(hex: 0x065F46))
                     Spacer()
-                    Button("Cancel") { pendingAssign = nil }
+                    Button("Done") { pendingAssign = nil; pendingTables = [] }
                         .font(AppFont.body(10, weight: .bold))
                         .foregroundStyle(Color(hex: 0x047857))
                 }
@@ -300,7 +486,7 @@ struct FloorPlanView: View {
                                 .foregroundStyle(pendingAssign?.id == b.id ? Color(hex: 0x065F46) : Color(hex: 0xB45309))
                             Spacer()
                             if onMoveBooking != nil {
-                                Text(pendingAssign?.id == b.id ? "tap a table to assign" : "tap or drag onto a table")
+                                Text(pendingAssign?.id == b.id ? "tap tables to add/remove" : "tap or drag onto a table")
                                     .font(AppFont.body(10))
                                     .foregroundStyle(Color(hex: 0xD97706))
                             }
@@ -312,7 +498,13 @@ struct FloorPlanView: View {
                         .draggable(b.id)
                         .onTapGesture {
                             if onMoveBooking != nil {
-                                pendingAssign = pendingAssign?.id == b.id ? nil : b
+                                if pendingAssign?.id == b.id {
+                                    pendingAssign = nil
+                                    pendingTables = []
+                                } else {
+                                    pendingAssign = b
+                                    pendingTables = parseTableIds(b.tableId)
+                                }
                             }
                         }
                     }
@@ -324,12 +516,112 @@ struct FloorPlanView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
-            // Party area capacity bars (Wimbledon only, like web)
-            if studio == "Wimbledon", selectedDate != nil {
-                HStack(spacing: 10) {
-                    partyAreaBar("Party Area 1", cap: partyAreaCapacity("party1"), tint: Color(hex: 0x16A34A))
-                    partyAreaBar("Party Area 2", cap: partyAreaCapacity("party2"), tint: Color(hex: 0x2563EB))
+            // Auto / manual assign controls (editable mode only)
+            if onMoveBooking != nil, selectedDate != nil {
+                HStack(spacing: 8) {
+                    Button { autoAssign() } label: {
+                        Text("Auto assign")
+                            .font(AppFont.body(11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(PPBrand.charcoal)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    Button { manualAssign() } label: {
+                        Text("Manual assign")
+                            .font(AppFont.body(11, weight: .bold))
+                            .foregroundStyle(PPBrand.charcoal)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(PPBrand.charcoal.opacity(0.3), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    if onBlockStudio != nil {
+                        Button { withAnimation { showBlockStudio.toggle() } } label: {
+                            Text("Block studio")
+                                .font(AppFont.body(11, weight: .bold))
+                                .foregroundStyle(Color(red: 0.8, green: 0.15, blue: 0.15))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.9, green: 0.3, blue: 0.3), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
                 }
+            }
+
+            // Block studio panel (editable mode only)
+            if showBlockStudio, let onBlockStudio, let date = selectedDate {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Block whole studio on \(date) — online bookings refused for this window")
+                        .font(AppFont.body(9, weight: .bold))
+                        .foregroundStyle(Color(red: 0.7, green: 0.1, blue: 0.1))
+                        .textCase(.uppercase)
+                        .tracking(0.4)
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("From").font(AppFont.body(9, weight: .bold)).foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                            TextField("10:00", text: $blockStart)
+                                .font(AppFont.body(11, weight: .semibold))
+                                .keyboardType(.numbersAndPunctuation)
+                                .padding(.horizontal, 8).padding(.vertical, 6)
+                                .background(Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(PPBrand.charcoal.opacity(0.2), lineWidth: 1))
+                                .frame(width: 66)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("To").font(AppFont.body(9, weight: .bold)).foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                            TextField("12:00", text: $blockEnd)
+                                .font(AppFont.body(11, weight: .semibold))
+                                .keyboardType(.numbersAndPunctuation)
+                                .padding(.horizontal, 8).padding(.vertical, 6)
+                                .background(Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(PPBrand.charcoal.opacity(0.2), lineWidth: 1))
+                                .frame(width: 66)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Label").font(AppFont.body(9, weight: .bold)).foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                            TextField("Studio Block", text: $blockLabel)
+                                .font(AppFont.body(11, weight: .semibold))
+                                .padding(.horizontal, 8).padding(.vertical, 6)
+                                .background(Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(PPBrand.charcoal.opacity(0.2), lineWidth: 1))
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        Button {
+                            guard blockEnd > blockStart else { return }
+                            onBlockStudio(blockStart, blockEnd, blockLabel.trimmingCharacters(in: .whitespaces).isEmpty ? "Studio Block" : blockLabel.trimmingCharacters(in: .whitespaces))
+                            showBlockStudio = false
+                        } label: {
+                            Text("Block")
+                                .font(AppFont.body(11, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14).padding(.vertical, 7)
+                                .background(Color(red: 0.85, green: 0.15, blue: 0.15))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                        Button { showBlockStudio = false } label: {
+                            Text("Cancel")
+                                .font(AppFont.body(11, weight: .bold))
+                                .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                                .padding(.horizontal, 10).padding(.vertical, 7)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(red: 1.0, green: 0.95, blue: 0.95))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.9, green: 0.75, blue: 0.75), lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
             // Day's bookings listed vertically down the left of the plan —
@@ -344,25 +636,91 @@ struct FloorPlanView: View {
                                 .textCase(.uppercase)
                                 .tracking(0.5)
                             ForEach(visibleBookings) { b in
-                                Text("\(shortTime(b.time)) \(firstName(b.name)) \(b.paintersCount)p")
-                                    .font(AppFont.body(11, weight: .semibold))
-                                    .foregroundStyle(PPBrand.charcoal)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 5)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                    .draggable(b.id)
-                                    .onTapGesture {
-                                        if let t = (b.tableId ?? "").split(separator: ",").first {
-                                            selectedTable = t.trimmingCharacters(in: .whitespaces)
+                                HStack(spacing: 4) {
+                                    Text("\(shortTime(b.time)) \(firstName(b.name)) \(b.paintersCount)p\((b.tableId ?? "").isEmpty ? "" : " - \(b.tableId ?? "")")")
+                                        .font(AppFont.body(11, weight: .semibold))
+                                        .foregroundStyle(b.source == "block" ? Color(hex: 0xB91C1C) : PPBrand.charcoal)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 2)
+                                    if onSeatBooking != nil {
+                                        Button {
+                                            onSeatBooking?(b.id)
+                                        } label: {
+                                            Text("Seat")
+                                                .font(AppFont.body(9, weight: .black))
+                                                .foregroundStyle(.white)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 3)
+                                                .background(Color(hex: 0xF59E0B))
+                                                .clipShape(RoundedRectangle(cornerRadius: 4))
                                         }
+                                        .buttonStyle(.plain)
                                     }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    pendingAssign?.id == b.id ? Color(hex: 0xD1FAE5)
+                                    : b.source == "block" ? Color(hex: 0xFEE2E2)
+                                    : .clear
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .contentShape(Rectangle())
+                                .draggable(b.id)
+                                .onTapGesture {
+                                    if onMoveBooking != nil {
+                                        if pendingAssign?.id == b.id {
+                                            pendingAssign = nil
+                                            pendingTables = []
+                                        } else {
+                                            pendingAssign = b
+                                            pendingTables = parseTableIds(b.tableId)
+                                        }
+                                    } else if let t = (b.tableId ?? "").split(separator: ",").first {
+                                        selectedTable = t.trimmingCharacters(in: .whitespaces)
+                                    }
+                                }
                             }
                         } else {
                             legendItem(color: .white, stroke: PPBrand.charcoal, label: "Free")
                             legendItem(color: Color(hex: 0xFEF9C3), stroke: Color(hex: 0xCA8A04), label: "Has bookings")
                             legendItem(color: Color(hex: 0xEF4444), stroke: Color(hex: 0xB91C1C), label: "Slot taken")
                             legendItem(color: PPBrand.charcoal, stroke: PPBrand.charcoal, label: "Selected")
+                        }
+
+                        // Seated parties — collapsed so they don't clutter the list
+                        if !seatedBookings.isEmpty {
+                            Divider().padding(.vertical, 2)
+                            Button {
+                                withAnimation { showSeated.toggle() }
+                            } label: {
+                                Text("Seated · \(seatedBookings.count) \(showSeated ? "▾" : "▸")")
+                                    .font(AppFont.body(9, weight: .bold))
+                                    .foregroundStyle(PPBrand.charcoal.opacity(0.45))
+                                    .textCase(.uppercase)
+                                    .tracking(0.5)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            if showSeated {
+                                ForEach(seatedBookings) { b in
+                                    Text("\(shortTime(b.time)) \(firstName(b.name)) \(b.paintersCount)p\((b.tableId ?? "").isEmpty ? "" : " - \(b.tableId ?? "")")")
+                                        .font(AppFont.body(11, weight: .semibold))
+                                        .foregroundStyle(PPBrand.charcoal.opacity(0.45))
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                        .draggable(b.id)
+                                        .onTapGesture {
+                                            if let t = (b.tableId ?? "").split(separator: ",").first {
+                                                selectedTable = t.trimmingCharacters(in: .whitespaces)
+                                            }
+                                        }
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 2)
@@ -537,27 +895,6 @@ struct FloorPlanView: View {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(PPBrand.charcoal.opacity(0.15), lineWidth: 1))
     }
 
-    private func partyAreaBar(_ title: String, cap: (used: Int, total: Int, remaining: Int), tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Text(title).textCase(.uppercase).tracking(0.5)
-                Spacer()
-                Text("\(cap.used)/\(cap.total)")
-            }
-            .font(AppFont.body(9, weight: .bold))
-            .foregroundStyle(tint)
-            ProgressView(value: Double(cap.used), total: Double(cap.total))
-                .tint(tint)
-            Text("\(cap.remaining) seats remaining")
-                .font(AppFont.body(9, weight: .semibold))
-                .foregroundStyle(tint.opacity(0.8))
-        }
-        .padding(8)
-        .background(tint.opacity(0.06))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(tint.opacity(0.25), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
     private var planContent: some View {
         ZStack {
             if studio == "Putney" {
@@ -663,8 +1000,8 @@ struct FloorPlanView: View {
         let labels = occupantLabels(relevantBookings(tid))
 
         return ZStack {
-            // Drop-target highlight
-            if dropTarget == tid {
+            // Drop-target / pending-assignment highlight
+            if dropTarget == tid || (pendingAssign != nil && pendingTables.contains(tid)) {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color(hex: 0x16A34A).opacity(0.13))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(hex: 0x16A34A), style: StrokeStyle(lineWidth: 2, dash: [5, 3])))
@@ -704,16 +1041,36 @@ struct FloorPlanView: View {
                 .onTapGesture {
                     Haptics.light()
                     if let pending = pendingAssign {
-                        onMoveBooking?(pending.id, tid)
-                        pendingAssign = nil
-                        selectedTable = tid
+                        // Pending mode toggles tables until Done — supports
+                        // multi-table bookings like T5+T6.
+                        if let i = pendingTables.firstIndex(of: tid) {
+                            pendingTables.remove(at: i)
+                        } else {
+                            pendingTables.append(tid)
+                        }
+                        onMoveBooking?(pending.id, pendingTables.joined(separator: ", "))
                     } else {
                         selectedTable = selectedTable == tid ? nil : tid
                         onAssign?(tid)
                     }
                 }
+                // Dropping appends the table to the booking's set rather than
+                // replacing it, then keeps pending mode open for more drops.
+                // On today's plan a drop also seats the booking — the "they
+                // arrived" gesture. Other dates just assign (planning).
                 .dropDestination(for: String.self) { items, _ in
-                    if let bookingId = items.first { onMoveBooking?(bookingId, tid) }
+                    if let bookingId = items.first, let b = bookings.first(where: { $0.id == bookingId }) {
+                        var next = pendingAssign?.id == bookingId ? pendingTables : parseTableIds(b.tableId)
+                        if !next.contains(tid) {
+                            next.append(tid)
+                            onMoveBooking?(bookingId, next.joined(separator: ", "))
+                            pendingTables = next
+                            pendingAssign = b
+                        }
+                        if isToday, b.status == "pending" || b.status == "confirmed" {
+                            onSeatBooking?(b.id)
+                        }
+                    }
                     dropTarget = nil
                     return true
                 } isTargeted: { targeted in
@@ -803,7 +1160,13 @@ struct FloorPlanTabView: View {
                 onAssign: nil,
                 onMoveBooking: { bookingId, tableId in
                     moveBooking(bookingId, to: tableId)
-                }
+                },
+                onSeatBooking: { bookingId in
+                    seatBooking(bookingId)
+                },
+                onBlockStudio: authVM.staff?.canEditBookings == true || authVM.staff?.role == "super_admin"
+                    ? { start, end, label in blockStudio(start, end, label) }
+                    : nil
             )
             .onAppear {
                 if let selected = bookingsVM.selectedStudio, availableStudios.contains(selected) {
@@ -827,6 +1190,15 @@ struct FloorPlanTabView: View {
         }
     }
 
+    private func seatBooking(_ bookingId: String) {
+        guard let staff = authVM.staff,
+              let booking = bookingsVM.bookings.first(where: { $0.id == bookingId }) else { return }
+        toastManager.success("\(firstName(booking.name)) seated")
+        Task {
+            await bookingsVM.optimisticUpdateStatus(booking: booking, status: .seated, staff: staff)
+        }
+    }
+
     private func moveBooking(_ bookingId: String, to tableId: String) {
         guard let staff = authVM.staff,
               let idx = bookingsVM.bookings.firstIndex(where: { $0.id == bookingId }) else { return }
@@ -843,6 +1215,22 @@ struct FloorPlanTabView: View {
                 toastManager.success(tableId.isEmpty ? "\(firstName(booking.name)) unassigned" : "\(firstName(booking.name)) → \(tableId)")
             } else {
                 toastManager.error(bookingsVM.error ?? "Failed to assign table")
+            }
+        }
+    }
+
+    private func blockStudio(_ startTime: String, _ endTime: String, _ label: String) {
+        guard let staff = authVM.staff else { return }
+        Task {
+            do {
+                try await APIClient.shared.blockStudio(
+                    studio: studio.rawValue, date: dateString,
+                    startTime: startTime, endTime: endTime, label: label, staff: staff
+                )
+                await bookingsVM.loadBookings(staff: staff)
+                toastManager.success("\(label) — \(studio.rawValue) blocked \(startTime)–\(endTime). Cancel the block booking to unblock.")
+            } catch {
+                toastManager.error("Failed to block studio")
             }
         }
     }

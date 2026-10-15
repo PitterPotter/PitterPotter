@@ -11,6 +11,7 @@ struct DashboardOverviewView: View {
     @State private var showingCollectionScanner = false
     @State private var showingNewBooking = false
     @State private var showingNewBabyPrint = false
+    @State private var showingBlockStudio = false
     private var selectedStudio: String? {
         get { bookingsVM.selectedStudio?.rawValue }
         nonmutating set { bookingsVM.selectedStudio = newValue.flatMap { Studio(rawValue: $0) } }
@@ -243,6 +244,12 @@ struct DashboardOverviewView: View {
             }
             .sheet(isPresented: $showingCollectionScanner) {
                 PaintingScannerView(bookingsVM: bookingsVM, authVM: authVM)
+            }
+            .sheet(isPresented: $showingBlockStudio) {
+                BlockStudioSheet()
+                    .environmentObject(authVM)
+                    .environmentObject(bookingsVM)
+                    .environmentObject(toastManager)
             }
         }
     }
@@ -609,6 +616,23 @@ struct DashboardOverviewView: View {
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(PPBrand.charcoal.opacity(0.15), lineWidth: 1)
                     )
+                }
+                if authVM.staff?.canEditBookings == true {
+                    Button {
+                        showingBlockStudio = true
+                    } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: "nosign")
+                                .font(AppFont.body(18, weight: .medium))
+                            Text("Block")
+                                .font(AppFont.body(11, weight: .bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.red.opacity(0.85))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
                 }
                 NavigationLink {
                     BookingsListView()
@@ -989,5 +1013,109 @@ struct CollectionStatCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
+    }
+}
+
+// MARK: - Block Studio Sheet
+
+/// Reserves every table at the studio for a time window so online bookings
+/// are refused. Cancel the "Studio Block" booking to unblock.
+struct BlockStudioSheet: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var bookingsVM: BookingsViewModel
+    @EnvironmentObject var toastManager: ToastManager
+    @Environment(\.dismiss) var dismiss
+
+    @State private var selectedStudio: Studio = .Putney
+    @State private var blockDate = Date()
+    @State private var startTime = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var endTime = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var label = "Studio Block"
+    @State private var isSaving = false
+
+    private var availableStudios: [Studio] {
+        authVM.staff?.visibleStudios ?? Studio.allCases
+    }
+
+    private let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(footer: Text("Reserves every table for the window — online bookings are refused. Cancel the block booking to unblock.")) {
+                    if availableStudios.count > 1 {
+                        Picker("Studio", selection: $selectedStudio) {
+                            ForEach(availableStudios, id: \.self) { Text($0.rawValue).tag($0) }
+                        }
+                    }
+                    DatePicker("Date", selection: $blockDate, displayedComponents: .date)
+                    DatePicker("From", selection: $startTime, displayedComponents: .hourAndMinute)
+                    DatePicker("To", selection: $endTime, displayedComponents: .hourAndMinute)
+                    TextField("Label", text: $label)
+                }
+
+                Section {
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        HStack {
+                            if isSaving { ProgressView() }
+                            Text(isSaving ? "Blocking..." : "Block Studio")
+                                .fontWeight(.bold)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .disabled(isSaving || endTime <= startTime)
+                }
+            }
+            .navigationTitle("Block Studio")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .onAppear {
+                if let current = bookingsVM.selectedStudio, availableStudios.contains(current) {
+                    selectedStudio = current
+                } else if let first = availableStudios.first {
+                    selectedStudio = first
+                }
+            }
+        }
+    }
+
+    private func save() async {
+        guard let staff = authVM.staff else { return }
+        isSaving = true
+        defer { isSaving = false }
+        let start = timeFormatter.string(from: startTime)
+        let end = timeFormatter.string(from: endTime)
+        let trimmed = label.trimmingCharacters(in: .whitespaces)
+        let finalLabel = trimmed.isEmpty ? "Studio Block" : trimmed
+        do {
+            try await APIClient.shared.blockStudio(
+                studio: selectedStudio.rawValue,
+                date: dateFormatter.string(from: blockDate),
+                startTime: start, endTime: end, label: finalLabel, staff: staff
+            )
+            await bookingsVM.loadBookings(staff: staff)
+            toastManager.success("\(finalLabel) — \(selectedStudio.rawValue) blocked \(start)–\(end). Cancel the block booking to unblock.")
+            dismiss()
+        } catch {
+            toastManager.error("Failed to block studio")
+        }
     }
 }

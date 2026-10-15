@@ -979,6 +979,7 @@ struct DayDashboardView: View {
     @State private var selectedBooking: Booking? = nil
     @State private var photoBooking: Booking? = nil
     @State private var showingGhostBooking = false
+    @State private var cancelTarget: Booking? = nil
 
     private var staffStudio: String? {
         guard let studios = authVM.staff?.allowedStudios, studios.count == 1 else { return nil }
@@ -1057,6 +1058,7 @@ struct DayDashboardView: View {
                         canUpdate: canUpdateStatus,
                         onMove: handleMove,
                         onNoShow: handleNoShow,
+                        onCancel: { id in cancelTarget = bookings.first(where: { $0.id == id }) },
                         onTap: { selectedBooking = $0 },
                         onAddPhoto: { photoBooking = $0 },
                         staffStudio: staffStudio
@@ -1090,20 +1092,6 @@ struct DayDashboardView: View {
                         staffStudio: staffStudio
                     )
                     .frame(width: 280)
-
-                    KanbanColumn(
-                        title: "No-Show",
-                        count: noshowColumn.count,
-                        bookings: noshowColumn,
-                        columnType: .noshow,
-                        canUpdate: canUpdateStatus,
-                        onMove: handleMove,
-                        onNoShow: nil,
-                        onTap: { selectedBooking = $0 },
-                        onAddPhoto: { photoBooking = $0 },
-                        staffStudio: staffStudio
-                    )
-                    .frame(width: 280)
                 }
                 .padding(.bottom, 8)
             }
@@ -1122,6 +1110,19 @@ struct DayDashboardView: View {
             CameraPicker { data in
                 uploadPhoto(data, for: booking)
             }
+        }
+        .confirmationDialog(
+            "Cancel \(cancelTarget?.name ?? "")'s booking?",
+            isPresented: Binding(
+                get: { cancelTarget != nil },
+                set: { if !$0 { cancelTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Cancel Booking", role: .destructive) { handleCancelConfirm() }
+            Button("Keep Booking", role: .cancel) { cancelTarget = nil }
+        } message: {
+            Text("The customer will be marked as cancelled and the slot freed up.")
         }
     }
 
@@ -1181,6 +1182,12 @@ struct DayDashboardView: View {
         onUpdateStatus(id, .noShow)
     }
 
+    private func handleCancelConfirm() {
+        guard let b = cancelTarget else { return }
+        onUpdateStatus(b.id, .cancelled)
+        cancelTarget = nil
+    }
+
     private func formatDate(_ s: String) -> String {
         PPDateDisplay.date(s)
     }
@@ -1227,6 +1234,7 @@ struct KanbanColumn: View {
     let canUpdate: Bool
     let onMove: (String, String) -> Void
     let onNoShow: ((String) -> Void)?
+    var onCancel: ((String) -> Void)? = nil
     let onTap: (Booking) -> Void
     let onAddPhoto: (Booking) -> Void
     var staffStudio: String? = nil
@@ -1263,6 +1271,7 @@ struct KanbanColumn: View {
                         canUpdate: canUpdate,
                         onMove: onMove,
                         onNoShow: onNoShow,
+                        onCancel: onCancel,
                         onTap: { onTap(booking) },
                         onAddPhoto: onAddPhoto,
                         staffStudio: staffStudio
@@ -1297,6 +1306,7 @@ struct KanbanBookingCard: View {
     let canUpdate: Bool
     let onMove: (String, String) -> Void
     let onNoShow: ((String) -> Void)?
+    var onCancel: ((String) -> Void)? = nil
     let onTap: () -> Void
     let onAddPhoto: (Booking) -> Void
     var staffStudio: String? = nil
@@ -1466,6 +1476,31 @@ struct KanbanBookingCard: View {
                                 .padding(.vertical, 4)
                                 .background(Color.gray.opacity(0.15))
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if columnType == .bookings && onCancel != nil {
+                            Button {
+                                onCancel?(booking.id)
+                            } label: {
+                                HStack(spacing: 2) {
+                                    Image(systemName: "xmark")
+                                        .font(AppFont.body(9, weight: .bold))
+                                    Text("Cancel")
+                                        .font(AppFont.body(9, weight: .bold))
+                                        .textCase(.uppercase)
+                                        .tracking(1)
+                                }
+                                .foregroundStyle(Color.red)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.red.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                                )
                             }
                             .buttonStyle(.plain)
                         }

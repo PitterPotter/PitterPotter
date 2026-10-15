@@ -1150,6 +1150,34 @@ actor APIClient {
 
     // MARK: - Collection Status
 
+    func blockStudio(studio: String, date: String, startTime: String, endTime: String, label: String, staff: Staff) async throws {
+        var request = URLRequest(url: URL(string: APIConfig.bookingsEndpoint)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(APIConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        let body: [String: Any] = [
+            "action": "blockStudio",
+            "username": staff.username,
+            "sessionToken": staff.sessionToken,
+            "studio": studio,
+            "date": date,
+            "startTime": startTime,
+            "endTime": endTime,
+            "label": label,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        guard http.statusCode == 200 else {
+            let error = try? JSONDecoder().decode(ErrorResponse.self, from: data)
+            throw APIError.serverError(error?.error ?? "Failed to block studio")
+        }
+    }
+
     func updateCollectionStatus(bookingId: String, studio: String, status: String, staff: Staff, location: String? = nil, collectedAt: String? = nil, readyAt: String? = nil) async throws {
         var request = URLRequest(url: URL(string: APIConfig.bookingsEndpoint)!)
         request.httpMethod = "POST"

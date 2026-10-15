@@ -22,6 +22,8 @@ struct CollectionsView: View {
     @State private var scanError: String?
     @State private var scannedBooking: Booking?
     @State private var expandedDates: Set<String> = []
+    @State private var expandedMonths: Set<String> = []
+    @State private var showNoPhotoGroup = false
     @State private var sortOrder: SortOrder = .newest
     @State private var needsPhotoOnly = false
     @State private var selectMode = false
@@ -59,11 +61,153 @@ struct CollectionsView: View {
         }
     }
 
+    // Painted: photo-less bookings are the stale backlog — they live in a
+    // collapsed bucket at the bottom so the active ~2-week queue stays short.
+    var mainBookings: [Booking] {
+        initialStage == .painted ? filteredBookings.filter { !($0.photos?.isEmpty ?? true) } : filteredBookings
+    }
+
+    var noPhotoBookings: [Booking] {
+        initialStage == .painted ? filteredBookings.filter { $0.photos?.isEmpty ?? true } : []
+    }
+
     var groupedByDate: [(date: String, bookings: [Booking])] {
-        let map = Dictionary(grouping: filteredBookings, by: { $0.date })
+        let map = Dictionary(grouping: mainBookings, by: { $0.date })
         var entries = map.map { (date: $0.key, bookings: $0.value.sorted { $0.time < $1.time }) }
         entries.sort { sortOrder == .newest ? $0.date > $1.date : $0.date < $1.date }
         return entries
+    }
+
+    var noPhotoGroupedByDate: [(date: String, bookings: [Booking])] {
+        let map = Dictionary(grouping: noPhotoBookings, by: { $0.date })
+        var entries = map.map { (date: $0.key, bookings: $0.value.sorted { $0.time < $1.time }) }
+        entries.sort { $0.date > $1.date }
+        return entries
+    }
+
+    // Month collapses wrap the date groups — long lists stay short.
+    private func groupIntoMonths(_ entries: [(date: String, bookings: [Booking])]) -> [(month: String, groups: [(date: String, bookings: [Booking])])] {
+        var order: [String] = []
+        var map: [String: [(date: String, bookings: [Booking])]] = [:]
+        for entry in entries {
+            let month = String(entry.date.prefix(7))
+            if map[month] == nil { order.append(month); map[month] = [] }
+            map[month]?.append(entry)
+        }
+        return order.map { (month: $0, groups: map[$0]!) }
+    }
+
+    var groupedByMonth: [(month: String, groups: [(date: String, bookings: [Booking])])] {
+        groupIntoMonths(groupedByDate)
+    }
+
+    var noPhotoByMonth: [(month: String, groups: [(date: String, bookings: [Booking])])] {
+        groupIntoMonths(noPhotoGroupedByDate)
+    }
+
+    private func monthTitle(_ month: String) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM"
+        guard let d = f.date(from: month) else { return month }
+        let out = DateFormatter()
+        out.dateFormat = "MMMM yyyy"
+        return out.string(from: d)
+    }
+
+    @ViewBuilder
+    private func dateSection(_ group: (date: String, bookings: [Booking])) -> some View {
+        CollapsibleDateSection(
+            date: group.date,
+            bookings: group.bookings,
+            stage: initialStage,
+            isExpanded: !nameSearchText.isEmpty || !phoneSearchText.isEmpty || expandedDates.contains(group.date),
+            onToggle: {
+                if expandedDates.contains(group.date) {
+                    expandedDates.remove(group.date)
+                } else {
+                    expandedDates.insert(group.date)
+                }
+            },
+            onTap: { booking in
+                if selectMode {
+                    toggleSelection(booking.id)
+                } else {
+                    selectedBooking = booking
+                }
+            },
+            onMove: moveToStage,
+            onAddPhoto: { booking in
+                selectedBooking = booking
+                showCamera = true
+            },
+            selectMode: selectMode,
+            selectedIds: selectedIds,
+            onToggleSelect: { id in toggleSelection(id) },
+            onReadyPrompt: { booking in
+                pendingMoveBooking = booking
+                showingReadyPrompt = true
+            },
+            onTagPhoto: { booking, photoIndex, xPct, yPct in
+                addTagToPhoto(bookingId: booking.id, photoIndex: photoIndex, x: xPct, y: yPct)
+            },
+            onRemoveLastTag: { booking, photoIndex in
+                removeLastTag(bookingId: booking.id, photoIndex: photoIndex)
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func monthSection(_ monthGroup: (month: String, groups: [(date: String, bookings: [Booking])])) -> some View {
+        let isExpanded = expandedMonths.contains(monthGroup.month)
+        let count = monthGroup.groups.reduce(0) { $0 + $1.bookings.count }
+        VStack(spacing: 0) {
+            Button {
+                withAnimation {
+                    if expandedMonths.contains(monthGroup.month) {
+                        expandedMonths.remove(monthGroup.month)
+                    } else {
+                        expandedMonths.insert(monthGroup.month)
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(AppFont.body(12, weight: .bold))
+                        .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                    Text(monthTitle(monthGroup.month))
+                        .font(AppFont.heading(13))
+                        .foregroundStyle(PPBrand.charcoal)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+                    Text("\(count) booking\(count != 1 ? "s" : "")")
+                        .font(AppFont.heading(10))
+                        .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(PPBrand.charcoal.opacity(0.08))
+                        .clipShape(Capsule())
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 10) {
+                    ForEach(monthGroup.groups, id: \.date) { group in
+                        dateSection(group)
+                    }
+                }
+                .padding(10)
+            }
+        }
+        .background(Color.white.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(PPBrand.charcoal.opacity(0.1), lineWidth: 1)
+        )
     }
 
     private func moveToStage(_ booking: Booking, _ stage: CollectionStage) {
@@ -143,44 +287,53 @@ struct CollectionsView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 10) {
-                            ForEach(groupedByDate, id: \.date) { group in
-                                CollapsibleDateSection(
-                                    date: group.date,
-                                    bookings: group.bookings,
-                                    stage: initialStage,
-                                    isExpanded: !nameSearchText.isEmpty || !phoneSearchText.isEmpty || expandedDates.contains(group.date),
-                                    onToggle: {
-                                        if expandedDates.contains(group.date) {
-                                            expandedDates.remove(group.date)
-                                        } else {
-                                            expandedDates.insert(group.date)
+                            ForEach(groupedByMonth, id: \.month) { monthGroup in
+                                monthSection(monthGroup)
+                            }
+
+                            // Painted: photo-less backlog collapsed into its own bucket
+                            if initialStage == .painted && !noPhotoByMonth.isEmpty {
+                                VStack(spacing: 0) {
+                                    Button {
+                                        withAnimation { showNoPhotoGroup.toggle() }
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: showNoPhotoGroup ? "chevron.up" : "chevron.down")
+                                                .font(AppFont.body(12, weight: .bold))
+                                                .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                                            Text("Without photos")
+                                                .font(AppFont.heading(13))
+                                                .foregroundStyle(PPBrand.charcoal.opacity(0.7))
+                                                .textCase(.uppercase)
+                                                .tracking(0.5)
+                                            Text("\(noPhotoBookings.count) booking\(noPhotoBookings.count != 1 ? "s" : "")")
+                                                .font(AppFont.heading(10))
+                                                .foregroundStyle(PPBrand.charcoal.opacity(0.6))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 3)
+                                                .background(PPBrand.charcoal.opacity(0.08))
+                                                .clipShape(Capsule())
+                                            Spacer()
                                         }
-                                    },
-                                    onTap: { booking in
-                                        if selectMode {
-                                            toggleSelection(booking.id)
-                                        } else {
-                                            selectedBooking = booking
-                                        }
-                                    },
-                                    onMove: moveToStage,
-                                    onAddPhoto: { booking in
-                                        selectedBooking = booking
-                                        showCamera = true
-                                    },
-                                    selectMode: selectMode,
-                                    selectedIds: selectedIds,
-                                    onToggleSelect: { id in toggleSelection(id) },
-                                    onReadyPrompt: { booking in
-                                        pendingMoveBooking = booking
-                                        showingReadyPrompt = true
-                                    },
-                                    onTagPhoto: { booking, photoIndex, xPct, yPct in
-                                        addTagToPhoto(bookingId: booking.id, photoIndex: photoIndex, x: xPct, y: yPct)
-                                    },
-                                    onRemoveLastTag: { booking, photoIndex in
-                                        removeLastTag(bookingId: booking.id, photoIndex: photoIndex)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 12)
                                     }
+                                    .buttonStyle(.plain)
+
+                                    if showNoPhotoGroup {
+                                        VStack(spacing: 10) {
+                                            ForEach(noPhotoByMonth, id: \.month) { monthGroup in
+                                                monthSection(monthGroup)
+                                            }
+                                        }
+                                        .padding(10)
+                                    }
+                                }
+                                .background(Color(red: 0.96, green: 0.95, blue: 0.93))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(PPBrand.charcoal.opacity(0.1), lineWidth: 1)
                                 )
                             }
                         }
@@ -802,6 +955,7 @@ struct CollectionCard: View {
     @EnvironmentObject var bookingsVM: BookingsViewModel
     @State private var tagMode = false
     @State private var locationMenuExpanded = false
+    @State private var showCollectConfirm = false
 
     var photoCount: Int { booking.photos?.count ?? 0 }
 
@@ -1294,6 +1448,27 @@ struct CollectionCard: View {
 
                 Spacer()
 
+                // Customer already collected — skips the ready email/SMS
+                if stage == .painted {
+                    Button {
+                        showCollectConfirm = true
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark")
+                                .font(AppFont.body(10, weight: .bold))
+                            Text("Collected")
+                                .font(AppFont.body(9, weight: .bold))
+                        }
+                        .foregroundStyle(Color(red: 0.1, green: 0.55, blue: 0.3))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color(red: 0.1, green: 0.7, blue: 0.4).opacity(0.12))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.1, green: 0.7, blue: 0.4).opacity(0.4), lineWidth: 1))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 // Forward button: Painted -> Ready (blue), Ready -> Collected (green)
                 if stage == .painted {
                     Button {
@@ -1353,6 +1528,16 @@ struct CollectionCard: View {
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
+        .confirmationDialog(
+            "Mark \(booking.name) as collected?",
+            isPresented: $showCollectConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Mark as Collected") { onMove?(booking, .collected) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Skips the ready email/SMS — for customers who already collected.")
+        }
     }
 }
 

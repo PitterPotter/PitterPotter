@@ -298,6 +298,34 @@ export async function sendDepositLink(id: string, staff?: Staff | null): Promise
   }
 }
 
+export async function blockStudio(studio: string, date: string, startTime: string, endTime: string, label: string, staff?: Staff | null): Promise<void> {
+  if (!staff) throw new Error('Staff required');
+
+  const response = await fetch(functionUrl('admin-bookings'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      action: 'blockStudio',
+      username: staff.username,
+      sessionToken: staff.sessionToken,
+      studio,
+      date,
+      startTime,
+      endTime,
+      label,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    console.error('Failed to block studio:', data.error);
+    throw new Error(data.error || 'Failed to block studio');
+  }
+}
+
 export interface StripePaymentDetails {
   id: string;
   status: string;

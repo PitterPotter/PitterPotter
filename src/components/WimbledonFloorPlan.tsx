@@ -44,6 +44,7 @@ export interface WimbledonFloorPlanProps {
   onAssign?: (tableId: string) => void;
   onMoveBooking?: (bookingId: string, tableId: string) => void;
   onSeatBooking?: (bookingId: string) => void;
+  onBlockStudio?: (startTime: string, endTime: string, label: string) => void;
   readOnly?: boolean;
   showTablePanel?: boolean;
   onTableClick?: (tableId: string) => void;
@@ -282,6 +283,7 @@ export default function WimbledonFloorPlan({
   onAssign,
   onMoveBooking,
   onSeatBooking,
+  onBlockStudio,
   readOnly = false,
   showTablePanel = true,
   onTableClick,
@@ -294,6 +296,10 @@ export default function WimbledonFloorPlan({
   const [blockedTables, setBlockedTables] = useState<BlockedTable[]>([]);
   const [blockReason, setBlockReason] = useState('');
   const [showBlockInput, setShowBlockInput] = useState(false);
+  const [showBlockStudio, setShowBlockStudio] = useState(false);
+  const [blockStart, setBlockStart] = useState('10:00');
+  const [blockEnd, setBlockEnd] = useState('12:00');
+  const [blockLabel, setBlockLabel] = useState('Studio Block');
 
   useEffect(() => {
     setBlockedTables(loadBlockedTables());
@@ -566,7 +572,7 @@ export default function WimbledonFloorPlan({
       )}
 
       {onMoveBooking && selectedDate && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleAutoAssign}
             className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-[#1B2D3C] text-white hover:bg-[#1B2D3C]/90 cursor-pointer"
@@ -579,6 +585,55 @@ export default function WimbledonFloorPlan({
           >
             Manual assign
           </button>
+          {onBlockStudio && (
+            <button
+              onClick={() => setShowBlockStudio(v => !v)}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-bold border border-red-300 text-red-700 hover:bg-red-50 cursor-pointer"
+            >
+              Block studio
+            </button>
+          )}
+        </div>
+      )}
+
+      {showBlockStudio && onBlockStudio && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+          <p className="text-[10px] font-bold text-red-800 uppercase tracking-wider">
+            Block whole studio on {selectedDate} — online bookings refused for this window
+          </p>
+          <div className="flex items-end gap-2 flex-wrap">
+            <label className="text-[10px] font-bold text-[#1B2D3C]/70">
+              From
+              <input type="time" value={blockStart} onChange={e => setBlockStart(e.target.value)}
+                className="block mt-0.5 px-2 py-1 border border-[#1B2D3C]/20 rounded text-xs bg-white" />
+            </label>
+            <label className="text-[10px] font-bold text-[#1B2D3C]/70">
+              To
+              <input type="time" value={blockEnd} onChange={e => setBlockEnd(e.target.value)}
+                className="block mt-0.5 px-2 py-1 border border-[#1B2D3C]/20 rounded text-xs bg-white" />
+            </label>
+            <label className="text-[10px] font-bold text-[#1B2D3C]/70 flex-1 min-w-32">
+              Label
+              <input type="text" value={blockLabel} onChange={e => setBlockLabel(e.target.value)}
+                className="block mt-0.5 w-full px-2 py-1 border border-[#1B2D3C]/20 rounded text-xs bg-white" />
+            </label>
+            <button
+              onClick={() => {
+                if (blockEnd <= blockStart) { window.alert('End time must be after start time'); return; }
+                onBlockStudio(blockStart, blockEnd, blockLabel.trim() || 'Studio Block');
+                setShowBlockStudio(false);
+              }}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-red-600 text-white hover:bg-red-700 cursor-pointer"
+            >
+              Block
+            </button>
+            <button
+              onClick={() => setShowBlockStudio(false)}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-[#1B2D3C]/60 hover:text-[#1B2D3C] cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

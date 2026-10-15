@@ -842,6 +842,97 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === 'blockStudio') {
+      if (!isSuperAdmin && !staff.can_edit_bookings) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { studio, date, startTime, endTime, label } = body;
+      if (!isOneOf(studio, ['Putney', 'Wimbledon'] as const) || !isNonEmptyString(date)
+        || !isNonEmptyString(startTime) || !isNonEmptyString(endTime)) {
+        return new Response(JSON.stringify({ error: 'studio, date, startTime and endTime are required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!isSuperAdmin && staff.allowed_studios && staff.allowed_studios.length > 0 && !staff.allowed_studios.includes(studio)) {
+        return new Response(JSON.stringify({ error: 'You can only block your assigned studio' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Seat count = open capacity so Putney's seat-count model is also fully blocked
+      const { data: capRows } = await supabase
+        .from('capacity')
+        .select('max_painters')
+        .eq('studio', studio)
+        .eq('session_type', 'open')
+        .limit(1);
+      const openCap = Number(capRows?.[0]?.max_painters) || (studio === 'Wimbledon' ? 58 : 32);
+
+      const { data: tables } = await supabase
+        .from('studio_tables')
+        .select('table_id')
+        .eq('studio', studio);
+      const tableIds = (tables || []).map((t: { table_id: string }) => t.table_id).filter(Boolean);
+
+      const timeRange = `${startTime}-${endTime}`;
+      const blockBookingId = crypto.randomUUID();
+      const { data: inserted, error: insertErr } = await supabase.from('bookings').insert({
+        booking_id: blockBookingId,
+        studio,
+        date,
+        time: timeRange,
+        name: isNonEmptyString(label) ? label : 'Studio Block',
+        email: '',
+        phone: '',
+        session_type: 'painting',
+        status: 'confirmed',
+        source: 'walk-in',
+        painters_count: openCap,
+        notes: 'Studio block — reserves every table for the window. Delete this booking to unblock.',
+        management_token: crypto.randomUUID(),
+        table_id: tableIds.join(', '),
+      }).select('id').single();
+      if (insertErr) throw insertErr;
+
+      const config = await loadStudioConfigFromDb(supabase, studio);
+      const window = getRequestWindow({
+        studio,
+        date,
+        time: timeRange,
+        paintersCount: openCap,
+        sessionType: 'painting',
+      }, config);
+      if (tableIds.length) {
+        const resourceRows = tableIds.map((tid: string) => ({
+          booking_id: inserted.id,
+          table_configuration_id: null,
+          table_id: tid,
+          blocked_start: window.start.toISOString(),
+          blocked_end: window.end.toISOString(),
+        }));
+        await supabase.from('booking_resources').insert(resourceRows);
+        await supabase.from('bookings').update({
+          resources: resourceRows.map((r: { table_id: string; blocked_start: string; blocked_end: string }) => ({
+            table_id: r.table_id,
+            table_configuration_id: null,
+            configuration_name: 'STUDIO_BLOCK',
+            blocked_start: r.blocked_start,
+            blocked_end: r.blocked_end,
+          })),
+        }).eq('id', inserted.id);
+      }
+
+      await logAudit(supabase, staff, 'block_studio', 'booking', blockBookingId, { studio, date, timeRange });
+      return new Response(JSON.stringify({ success: true, bookingId: blockBookingId }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'delete') {
       if (!isSuperAdmin && !staff.can_delete_bookings) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), {

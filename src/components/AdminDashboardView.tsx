@@ -11,7 +11,7 @@ import { DayPicker } from 'react-day-picker';
 import { format, isSameDay, parseISO, getDay } from 'date-fns';
 import { BookingInquiry, GiftCard, Staff, AuditLog, GiftCardApiRow, StaffApiRow, EmailTemplate, SMSTemplate, EmailLog } from '../types';
 import { supabase, isSupabaseEnabled } from '../lib/supabase';
-import { loadBookings, createBooking, updateBooking, patchBooking, updateBookingStatus, deleteBooking, getRemainingCapacity, sendDepositLink, getPaymentDetails } from '../lib/bookings';
+import { loadBookings, createBooking, updateBooking, patchBooking, updateBookingStatus, deleteBooking, getRemainingCapacity, sendDepositLink, getPaymentDetails, blockStudio } from '../lib/bookings';
 import type { StripePaymentDetails } from '../lib/bookings';
 import { compressImage } from '../lib/imageCompression';
 import QRScanner from './QRScanner';
@@ -1444,6 +1444,16 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       showToast(tableId ? `Table ${tableId} assigned` : 'Table unassigned', 'success');
     } catch {
       showToast('Failed to update table assignment', 'error');
+    }
+  };
+
+  const handleBlockStudio = async (startTime: string, endTime: string, label: string) => {
+    try {
+      await blockStudio(effectiveFloorPlanStudio, floorPlanDate, startTime, endTime, label, staff);
+      await loadInquiries();
+      showToast(`${label} — ${effectiveFloorPlanStudio} blocked ${startTime}–${endTime}. Cancel the "${label}" booking to unblock.`, 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to block studio', 'error');
     }
   };
 
@@ -3637,6 +3647,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   readOnly
                   onMoveBooking={(bookingId, tableId) => updateBookingTable(bookingId, tableId)}
                   onSeatBooking={canUpdateStatus ? (bookingId) => updateStatus(bookingId, 'seated') : undefined}
+                  onBlockStudio={canEdit ? handleBlockStudio : undefined}
                 />
               ) : (
                 <PutneyFloorPlan
@@ -3645,6 +3656,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   readOnly
                   onMoveBooking={(bookingId, tableId) => updateBookingTable(bookingId, tableId)}
                   onSeatBooking={canUpdateStatus ? (bookingId) => updateStatus(bookingId, 'seated') : undefined}
+                  onBlockStudio={canEdit ? handleBlockStudio : undefined}
                 />
               )}
             </div>

@@ -11,6 +11,10 @@ Per project owner: **every admin-facing change must be applied to both the web a
 (`src/components/AdminDashboardView.tsx` + `src/components/admin/*`) and the iOS admin app
 (`ios-admin/PitterPotterAdmin/**`).** Do not implement a feature on one platform only.
 
+**Batch iOS releases:** the owner does not want frequent TestFlight versions. iOS changes
+may stay uncommitted (or committed without a build) until the owner asks — then commit
+everything and upload **one** TestFlight build containing all accumulated changes.
+
 ## Global location switcher (Putney / Wimbledon)
 
 Both apps share the same model:

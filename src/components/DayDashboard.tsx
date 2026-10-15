@@ -63,6 +63,7 @@ function BookingCard({
   canUpdate,
   onMove,
   onNoShow,
+  onCancel,
   onClick,
 }: {
   booking: BookingInquiry;
@@ -70,6 +71,7 @@ function BookingCard({
   canUpdate: boolean;
   onMove: (id: string, direction: 'forward' | 'back') => void;
   onNoShow?: (id: string) => void;
+  onCancel?: (id: string) => void;
   onClick: (booking: BookingInquiry) => void;
 }) {
   return (
@@ -128,6 +130,14 @@ function BookingCard({
               className="flex items-center gap-0.5 px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-700 text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-3 h-3" /> No-Show
+            </button>
+          )}
+          {column === 'bookings' && onCancel && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCancel(booking.id); }}
+              className="flex items-center gap-0.5 px-2 py-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+            >
+              <X className="w-3 h-3" /> Cancel
             </button>
           )}
           {column !== 'complete' && column !== 'noshow' && (
@@ -303,6 +313,14 @@ export default function DayDashboard({
     onUpdateStatus(id, 'no_show');
   };
 
+  const handleCancel = (id: string) => {
+    const booking = bookings.find(b => b.id === id);
+    if (!booking) return;
+    if (window.confirm(`Cancel ${booking.name}'s booking?`)) {
+      onUpdateStatus(id, 'cancelled');
+    }
+  };
+
   const handleEdit = (booking: BookingInquiry) => {
     setSelectedBooking(null);
     onEditBooking(booking);
@@ -353,6 +371,7 @@ export default function DayDashboard({
                 canUpdate={canUpdateStatus}
                 onMove={handleMove}
                 onNoShow={handleNoShow}
+                onCancel={handleCancel}
                 onClick={setSelectedBooking}
               />
             ))

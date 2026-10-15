@@ -272,6 +272,20 @@ function BookingCard({
 
           {stage === 'painted' && (
             <button
+              onClick={() => {
+                if (window.confirm(`Mark ${booking.name} as collected without sending a ready notification?`)) {
+                  onSetStage(booking, 'collected');
+                }
+              }}
+              className="inline-flex items-center gap-0.5 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+              title="Customer already collected — skips the ready email/SMS"
+            >
+              <Check className="w-3 h-3" /> Collected
+            </button>
+          )}
+
+          {stage === 'painted' && (
+            <button
               onClick={() => onSetStage(booking, 'ready')}
               className="inline-flex items-center gap-0.5 px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer ml-auto"
             >
@@ -324,6 +338,8 @@ export default function CollectionsTab({
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [showNoPhotoGroup, setShowNoPhotoGroup] = useState(false);
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
@@ -365,9 +381,20 @@ export default function CollectionsTab({
     });
   }, [eligible, fixedStage, nameQuery, phoneQuery, dateQuery, studioFilter, needsPhotoOnly]);
 
+  // Painted: photo-less bookings are the stale backlog — they live in a
+  // collapsed bucket at the bottom so the active ~2-week queue stays short.
+  const mainList = useMemo(
+    () => fixedStage === 'painted' ? filtered.filter(b => b.photos && b.photos.length > 0) : filtered,
+    [filtered, fixedStage],
+  );
+  const paintedNoPhoto = useMemo(
+    () => fixedStage === 'painted' ? filtered.filter(b => !(b.photos && b.photos.length > 0)) : [],
+    [filtered, fixedStage],
+  );
+
   const grouped = useMemo(() => {
     const map = new Map<string, BookingInquiry[]>();
-    for (const b of filtered) {
+    for (const b of mainList) {
       const list = map.get(b.date) ?? [];
       list.push(b);
       map.set(b.date, list);
@@ -376,7 +403,34 @@ export default function CollectionsTab({
     const entries = [...map.entries()];
     entries.sort((a, b) => sortOrder === 'newest' ? b[0].localeCompare(a[0]) : a[0].localeCompare(b[0]));
     return entries;
-  }, [filtered, sortOrder]);
+  }, [mainList, sortOrder]);
+
+  const noPhotoGrouped = useMemo(() => {
+    const map = new Map<string, BookingInquiry[]>();
+    for (const b of paintedNoPhoto) {
+      const list = map.get(b.date) ?? [];
+      list.push(b);
+      map.set(b.date, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => a.time.localeCompare(b.time));
+    const entries = [...map.entries()];
+    entries.sort((a, b) => b[0].localeCompare(a[0]));
+    return entries;
+  }, [paintedNoPhoto]);
+
+  // Month collapses wrap the existing date groups — long lists stay short.
+  const groupByMonth = (entries: [string, BookingInquiry[]][]) => {
+    const byMonth = new Map<string, [string, BookingInquiry[]][]>();
+    for (const [date, items] of entries) {
+      const month = date.slice(0, 7);
+      const list = byMonth.get(month) ?? [];
+      list.push([date, items]);
+      byMonth.set(month, list);
+    }
+    return [...byMonth.entries()];
+  };
+  const groupedByMonth = useMemo(() => groupByMonth(grouped), [grouped]);
+  const noPhotoByMonth = useMemo(() => groupByMonth(noPhotoGrouped), [noPhotoGrouped]);
 
   const clearFilters = () => {
     setNameQuery('');
@@ -435,6 +489,99 @@ export default function CollectionsTab({
   const isSearching = Boolean(nameQuery.trim() || phoneQuery.trim());
 
   const info = STAGE_INFO[fixedStage];
+
+  const renderCard = (b: BookingInquiry) => (
+    <BookingCard
+      key={b.id}
+      booking={b}
+      stage={fixedStage}
+      canUpdate={canUpdate}
+      onSetStage={onSetStage}
+      onOpenBooking={onOpenBooking}
+      onUploadPhotos={onUploadPhotos}
+      uploading={uploadingId === b.id}
+      selected={selectedIds.has(b.id)}
+      onSelect={(booking) => {
+        setSelectedIds(prev => {
+          const next = new Set(prev);
+          if (next.has(booking.id)) next.delete(booking.id);
+          else next.add(booking.id);
+          return next;
+        });
+      }}
+      onSetPhotoTag={onSetPhotoTag}
+      onAddPhotoTag={onAddPhotoTag}
+      onRemovePhotoTag={onRemovePhotoTag}
+      onOpenImage={(images, index) => { setModalImages(images); setModalIndex(index); setModalPhotoTags(b.photoTags); }}
+    />
+  );
+
+  const renderDateGroup = (date: string, items: BookingInquiry[]) => {
+    const isExpanded = expandedDates.has(date);
+    const photoCount = items.reduce((sum, b) => sum + (b.photos?.length ?? 0), 0);
+    return (
+      <div key={date} className="border border-[#1B2D3C]/10 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setExpandedDates(prev => {
+            const next = new Set(prev);
+            if (next.has(date)) next.delete(date);
+            else next.add(date);
+            return next;
+          })}
+          className="w-full flex items-center gap-2 px-4 py-3 bg-[#F8FAFA] hover:bg-[#DBE7E4]/40 transition-colors cursor-pointer"
+        >
+          {isExpanded ? <ChevronUp className="w-4 h-4 text-[#1B2D3C]/60" /> : <ChevronDown className="w-4 h-4 text-[#1B2D3C]/60" />}
+          <h3 className="text-sm font-black text-[#1B2D3C] uppercase tracking-wider">
+            {format(parseISO(date), 'EEE d MMM yyyy')}
+          </h3>
+          <span className="px-2 py-0.5 bg-[#1B2D3C]/10 text-[#1B2D3C]/60 text-[10px] font-black rounded-full">
+            {items.length} booking{items.length !== 1 ? 's' : ''}
+          </span>
+          {photoCount > 0 && (
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-full">
+              {photoCount} photo{photoCount !== 1 ? 's' : ''}
+            </span>
+          )}
+        </button>
+        {isExpanded && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3">
+            {items.map(b => renderCard(b))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderMonth = (month: string, dateGroups: [string, BookingInquiry[]][]) => {
+    const isExpanded = expandedMonths.has(month);
+    const bookingCount = dateGroups.reduce((sum, [, items]) => sum + items.length, 0);
+    return (
+      <div key={month} className="border border-[#1B2D3C]/10 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setExpandedMonths(prev => {
+            const next = new Set(prev);
+            if (next.has(month)) next.delete(month);
+            else next.add(month);
+            return next;
+          })}
+          className="w-full flex items-center gap-2 px-4 py-3 bg-[#DBE7E4]/50 hover:bg-[#DBE7E4] transition-colors cursor-pointer"
+        >
+          {isExpanded ? <ChevronUp className="w-4 h-4 text-[#1B2D3C]/60" /> : <ChevronDown className="w-4 h-4 text-[#1B2D3C]/60" />}
+          <h3 className="text-sm font-black text-[#1B2D3C] uppercase tracking-wider">
+            {format(parseISO(`${month}-01`), 'MMMM yyyy')}
+          </h3>
+          <span className="px-2 py-0.5 bg-[#1B2D3C]/10 text-[#1B2D3C]/60 text-[10px] font-black rounded-full">
+            {bookingCount} booking{bookingCount !== 1 ? 's' : ''}
+          </span>
+        </button>
+        {isExpanded && (
+          <div className="space-y-3 p-3">
+            {dateGroups.map(([date, items]) => renderDateGroup(date, items))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -707,93 +854,34 @@ export default function CollectionsTab({
         </div>
       ) : isSearching ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map(b => (
-            <BookingCard
-              key={b.id}
-              booking={b}
-              stage={fixedStage}
-              canUpdate={canUpdate}
-              onSetStage={onSetStage}
-              onOpenBooking={onOpenBooking}
-              onUploadPhotos={onUploadPhotos}
-              uploading={uploadingId === b.id}
-              selected={selectedIds.has(b.id)}
-              onSelect={(booking) => {
-                setSelectedIds(prev => {
-                  const next = new Set(prev);
-                  if (next.has(booking.id)) next.delete(booking.id);
-                  else next.add(booking.id);
-                  return next;
-                });
-              }}
-              onSetPhotoTag={onSetPhotoTag}
-              onAddPhotoTag={onAddPhotoTag}
-              onRemovePhotoTag={onRemovePhotoTag}
-              onOpenImage={(images, index) => { setModalImages(images); setModalIndex(index); setModalPhotoTags(b.photoTags); }}
-            />
-          ))}
+          {filtered.map(b => renderCard(b))}
         </div>
       ) : (
         <div className="space-y-3">
-          {grouped.map(([date, items]) => {
-            const isExpanded = expandedDates.has(date);
-            const photoCount = items.reduce((sum, b) => sum + (b.photos?.length ?? 0), 0);
-            return (
-              <div key={date} className="border border-[#1B2D3C]/10 rounded-xl overflow-hidden">
-                <button
-                  onClick={() => setExpandedDates(prev => {
-                    const next = new Set(prev);
-                    if (next.has(date)) next.delete(date);
-                    else next.add(date);
-                    return next;
-                  })}
-                  className="w-full flex items-center gap-2 px-4 py-3 bg-[#F8FAFA] hover:bg-[#DBE7E4]/40 transition-colors cursor-pointer"
-                >
-                  {isExpanded ? <ChevronUp className="w-4 h-4 text-[#1B2D3C]/60" /> : <ChevronDown className="w-4 h-4 text-[#1B2D3C]/60" />}
-                  <h3 className="text-sm font-black text-[#1B2D3C] uppercase tracking-wider">
-                    {format(parseISO(date), 'EEE d MMM yyyy')}
-                  </h3>
-                  <span className="px-2 py-0.5 bg-[#1B2D3C]/10 text-[#1B2D3C]/60 text-[10px] font-black rounded-full">
-                    {items.length} booking{items.length !== 1 ? 's' : ''}
-                  </span>
-                  {photoCount > 0 && (
-                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-full">
-                      {photoCount} photo{photoCount !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </button>
-                {isExpanded && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3">
-                    {items.map(b => (
-                      <BookingCard
-                        key={b.id}
-                        booking={b}
-                        stage={fixedStage}
-                        canUpdate={canUpdate}
-                        onSetStage={onSetStage}
-                        onOpenBooking={onOpenBooking}
-                        onUploadPhotos={onUploadPhotos}
-                        uploading={uploadingId === b.id}
-                        selected={selectedIds.has(b.id)}
-                        onSelect={(booking) => {
-                          setSelectedIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(booking.id)) next.delete(booking.id);
-                            else next.add(booking.id);
-                            return next;
-                          });
-                        }}
-                        onSetPhotoTag={onSetPhotoTag}
-                        onAddPhotoTag={onAddPhotoTag}
-                        onRemovePhotoTag={onRemovePhotoTag}
-                        onOpenImage={(images, index) => { setModalImages(images); setModalIndex(index); setModalPhotoTags(b.photoTags); }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {groupedByMonth.map(([month, dateGroups]) => renderMonth(month, dateGroups))}
+
+          {/* Painted: photo-less backlog collapsed into its own bucket */}
+          {fixedStage === 'painted' && noPhotoByMonth.length > 0 && (
+            <div className="border border-[#1B2D3C]/10 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setShowNoPhotoGroup(v => !v)}
+                className="w-full flex items-center gap-2 px-4 py-3 bg-stone-50 hover:bg-stone-100 transition-colors cursor-pointer"
+              >
+                {showNoPhotoGroup ? <ChevronUp className="w-4 h-4 text-[#1B2D3C]/60" /> : <ChevronDown className="w-4 h-4 text-[#1B2D3C]/60" />}
+                <h3 className="text-sm font-black text-[#1B2D3C]/70 uppercase tracking-wider">
+                  Without photos
+                </h3>
+                <span className="px-2 py-0.5 bg-[#1B2D3C]/10 text-[#1B2D3C]/60 text-[10px] font-black rounded-full">
+                  {paintedNoPhoto.length} booking{paintedNoPhoto.length !== 1 ? 's' : ''}
+                </span>
+              </button>
+              {showNoPhotoGroup && (
+                <div className="space-y-3 p-3">
+                  {noPhotoByMonth.map(([month, dateGroups]) => renderMonth(month, dateGroups))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

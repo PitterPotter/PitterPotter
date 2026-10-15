@@ -2828,15 +2828,17 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 }
               }}
             />
-            <button
-              onClick={() => {
-                localStorage.setItem('pp_activate_edit_mode', '1');
-                window.open('/', '_blank');
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px]"
-            >
-              <Pencil className="w-4 h-4" /> <span className="hidden sm:inline">Editor</span>
-            </button>
+            {isSuperAdmin && (
+              <button
+                onClick={() => {
+                  localStorage.setItem('pp_activate_edit_mode', '1');
+                  window.open('/', '_blank');
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px]"
+              >
+                <Pencil className="w-4 h-4" /> <span className="hidden sm:inline">Editor</span>
+              </button>
+            )}
             <button
               onClick={onLogout}
               className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[44px]"

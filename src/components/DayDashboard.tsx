@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Users, CheckCircle, Clock, MapPin, Phone, Mail, Gift,
-  FileText, X, ChevronRight, ChevronLeft, UserCheck, PartyPopper, Baby,
+  FileText, X, ChevronRight, ChevronLeft, UserCheck,
 } from 'lucide-react';
 import { BookingInquiry } from '../types';
 
@@ -259,10 +259,7 @@ export default function DayDashboard({
   onBack,
   onUpdateStatus,
   onEditBooking,
-  onAddWalkIn,
-  onAddBooking,
   canUpdateStatus,
-  canAddWalkIn,
 }: DayDashboardProps) {
   const [selectedBooking, setSelectedBooking] = useState<BookingInquiry | null>(null);
 
@@ -327,36 +324,6 @@ export default function DayDashboard({
           </h2>
         </div>
       </div>
-
-      {/* Action banner — same as main dashboard */}
-      {canAddWalkIn && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={onAddWalkIn}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#1B2D3C] hover:bg-[#486581] text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
-          >
-            <Users className="w-4 h-4" /> Walk-in
-          </button>
-          <button
-            onClick={() => onAddBooking('painting')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
-          >
-            <Users className="w-4 h-4" /> New Booking
-          </button>
-          <button
-            onClick={() => onAddBooking('birthday-party')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
-          >
-            <PartyPopper className="w-4 h-4" /> New Party
-          </button>
-          <button
-            onClick={() => onAddBooking('clay-imprints')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
-          >
-            <Baby className="w-4 h-4" /> New Baby Print
-          </button>
-        </div>
-      )}
 
       {/* Stat bubbles */}
       <div className="grid grid-cols-5 gap-3">

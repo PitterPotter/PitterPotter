@@ -150,21 +150,23 @@ struct EposView: View {
     // MARK: - Catalogue
 
     private var categoryBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                catChip(nil, label: "All", color: PPBrand.charcoal)
-                ForEach(categories) { c in
-                    catChip(c.id, label: c.name, color: ppColor(c.color, fallback: PPBrand.charcoal))
-                }
-                Button { showCustom = true } label: {
-                    Text("+ CUSTOM")
-                        .font(AppFont.heading(11))
-                        .foregroundStyle(Color(hex: 0x047857))
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: 0x047857).opacity(0.4), lineWidth: 1.5))
-                }
-                .buttonStyle(.plain)
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+            catChip(nil, label: "All", color: PPBrand.charcoal)
+            ForEach(categories) { c in
+                catChip(c.id, label: c.name, color: ppColor(c.color, fallback: PPBrand.charcoal))
             }
+            Button { showCustom = true } label: {
+                Text("+ CUSTOM")
+                    .font(AppFont.heading(11))
+                    .foregroundStyle(Color(hex: 0x047857))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 8).padding(.vertical, 12)
+                    .background(Color(hex: 0x047857).opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: 0x047857).opacity(0.4), lineWidth: 1.5))
+            }
+            .buttonStyle(.plain)
         }
         .padding(.bottom, 10)
     }
@@ -175,7 +177,9 @@ struct EposView: View {
             Text(label.uppercased())
                 .font(AppFont.heading(11))
                 .foregroundStyle(selected ? .white : PPBrand.charcoal)
-                .padding(.horizontal, 14).padding(.vertical, 10)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 8).padding(.vertical, 12)
                 .background(selected ? color : Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(PPBrand.charcoal.opacity(0.15), lineWidth: selected ? 0 : 1.5))

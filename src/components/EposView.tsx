@@ -282,20 +282,20 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
           </div>
         ) : (
           <>
-            <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+            <div className="grid grid-cols-3 gap-2 mb-3">
               <button
                 onClick={() => setActiveCategory('all')}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer ${activeCategory === 'all' ? 'bg-[#1B2D3C] text-white' : 'bg-white border-2 border-[#1B2D3C]/15 text-[#1B2D3C]'}`}
+                className={`px-2 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-center leading-tight cursor-pointer ${activeCategory === 'all' ? 'bg-[#1B2D3C] text-white' : 'bg-white border-2 border-[#1B2D3C]/15 text-[#1B2D3C]'}`}
               >All</button>
               {categories.map(c => (
                 <button key={c.id} onClick={() => setActiveCategory(c.id)}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer ${activeCategory === c.id ? 'text-white' : 'bg-white border-2 border-[#1B2D3C]/15 text-[#1B2D3C]'}`}
+                  className={`px-2 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-center leading-tight cursor-pointer ${activeCategory === c.id ? 'text-white' : 'bg-white border-2 border-[#1B2D3C]/15 text-[#1B2D3C]'}`}
                   style={activeCategory === c.id ? { backgroundColor: c.color } : {}}>
                   {c.name}
                 </button>
               ))}
               <button onClick={() => setCustomModal(true)}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer bg-emerald-50 border-2 border-emerald-500/30 text-emerald-700">
+                className="px-2 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-center leading-tight cursor-pointer bg-emerald-50 border-2 border-emerald-500/30 text-emerald-700">
                 + Custom
               </button>
             </div>

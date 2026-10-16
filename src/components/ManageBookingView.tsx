@@ -204,11 +204,9 @@ export default function ManageBookingView({ setCurrentPage }: ManageBookingViewP
     const slotKey: SlotSessionType = ['birthday-party', 'baby-shower-hen', 'corporate'].includes(booking.sessionType)
       ? 'party'
       : booking.sessionType === 'clay-imprints' ? 'baby-prints' : 'painting';
-    const dt: DayType = (() => {
-      const d = getDay(parseISO(newDate));
-      return d === 0 || d === 6 ? 'weekend' : 'weekday';
-    })();
-    return filterPastSlots(getSlots(slotKey, booking.studio as Studio, dt), parseISO(newDate));
+    const dayNum = getDay(parseISO(newDate));
+    const dt: DayType = dayNum === 0 || dayNum === 6 ? 'weekend' : 'weekday';
+    return filterPastSlots(getSlots(slotKey, booking.studio as Studio, dt, dayNum), parseISO(newDate));
   };
 
   if (loading) {

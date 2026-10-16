@@ -90,7 +90,7 @@ function getTimeSlots(date: Date, closures: ClosureDates, studio: Studio, sessio
   if (!baseAvailable && !holidayMondayAvailable) return [];
 
   const dayType: DayType = (day === 0 || day === 6) ? 'weekend' : 'weekday';
-  return filterPastSlots(getSlots(SLOT_SESSION_KEY(sessionType), studio, dayType), date);
+  return filterPastSlots(getSlots(SLOT_SESSION_KEY(sessionType), studio, dayType, day), date);
 }
 
 const STEPS = ['Location', 'Session', 'Date & Time', 'Your Details', 'Review'];

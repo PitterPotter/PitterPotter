@@ -88,7 +88,7 @@ function getTimeSlots(date: Date, closures: ClosureDates, studio: 'Putney' | 'Wi
   const isHoliday = isDateInHolidayRange(dateStr, closures.schoolHolidays);
   if (day >= 2 || day === 0 || (day === 1 && isHoliday)) {
     const dayType: DayType = (day === 0 || day === 6) ? 'weekend' : 'weekday';
-    return filterPastSlots(getSlots('party', studio, dayType), date);
+    return filterPastSlots(getSlots('party', studio, dayType, day), date);
   }
   return [];
 }

@@ -10,6 +10,10 @@ struct ImageModal: View {
     @State private var index: Int
     @State private var tagMode = false
     @State private var showTagHint = true
+    @State private var zoomScale: CGFloat = 1
+    @State private var lastZoom: CGFloat = 1
+    @State private var panOffset: CGSize = .zero
+    @State private var lastPan: CGSize = .zero
 
     init(images: [String], initialIndex: Int, onClose: @escaping () -> Void, photoTags: [String: [PhotoTag]]? = nil, onTagPhoto: ((Int, Double, Double) -> Void)? = nil) {
         self.images = images
@@ -49,7 +53,7 @@ struct ImageModal: View {
             // Image with tag overlays
             GeometryReader { geo in
                 if let url = URL(string: images[index]) {
-                    CachedAsyncImage(url: url, contentMode: .fit)
+                    CachedAsyncImage(url: url, contentMode: .fit, maxDimension: 2048)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .overlay {
                             // Tag overlays
@@ -85,6 +89,39 @@ struct ImageModal: View {
                             }
                         }
                         .contentShape(Rectangle())
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    zoomScale = max(1, min(6, lastZoom * value))
+                                }
+                                .onEnded { _ in
+                                    lastZoom = zoomScale
+                                    if zoomScale == 1 { resetPan() }
+                                }
+                        )
+                        .simultaneousGesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    guard zoomScale > 1 else { return }
+                                    panOffset = CGSize(
+                                        width: lastPan.width + value.translation.width,
+                                        height: lastPan.height + value.translation.height
+                                    )
+                                }
+                                .onEnded { _ in lastPan = panOffset }
+                        )
+                        .onTapGesture(count: 2) { _ in
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                if zoomScale > 1 {
+                                    zoomScale = 1
+                                    lastZoom = 1
+                                    resetPan()
+                                } else {
+                                    zoomScale = 2.5
+                                    lastZoom = 2.5
+                                }
+                            }
+                        }
                         .onTapGesture { location in
                             if tagMode, onTagPhoto != nil {
                                 let xPct = Double(location.x / geo.size.width * 100)
@@ -97,6 +134,8 @@ struct ImageModal: View {
                                 }
                             }
                         }
+                        .scaleEffect(zoomScale)
+                        .offset(panOffset)
                 }
             }
 
@@ -193,6 +232,7 @@ struct ImageModal: View {
         .gesture(
             DragGesture()
                 .onEnded { value in
+                    guard zoomScale <= 1 else { return }
                     if abs(value.translation.width) > 50 {
                         if value.translation.width > 0 {
                             index = (index - 1 + images.count) % images.count
@@ -202,5 +242,15 @@ struct ImageModal: View {
                     }
                 }
         )
+        .onChange(of: index) { _ in
+            zoomScale = 1
+            lastZoom = 1
+            resetPan()
+        }
+    }
+
+    private func resetPan() {
+        panOffset = .zero
+        lastPan = .zero
     }
 }

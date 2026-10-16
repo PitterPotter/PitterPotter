@@ -28,8 +28,8 @@ struct CameraPicker: UIViewControllerRepresentable {
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
             if let image = info[.originalImage] as? UIImage {
-                let resized = resizeImage(image, maxDimension: 1024)
-                let imageData = resized.jpegData(compressionQuality: 0.7) ?? Data()
+                let resized = resizeImage(image, maxDimension: 2048)
+                let imageData = resized.jpegData(compressionQuality: 0.75) ?? Data()
                 parent.onImageCaptured(imageData)
             }
             parent.dismiss()

@@ -13,6 +13,7 @@ struct PaintingScannerView: View {
     @State private var showVoucherRedeem = false
     @State private var isCheckingVoucher = false
     @State private var manualCode = ""
+    @State private var showPhotoModal = false
 
     var body: some View {
         NavigationStack {
@@ -51,6 +52,11 @@ struct PaintingScannerView: View {
             .sheet(isPresented: $showVoucherRedeem) {
                 GiftCardRedeemView(initialCode: voucherCode ?? "")
                     .environmentObject(authVM)
+            }
+            .fullScreenCover(isPresented: $showPhotoModal) {
+                if let photos = scannedBooking?.photos {
+                    ImageModal(images: photos, initialIndex: 0, onClose: { showPhotoModal = false }, photoTags: scannedBooking?.photoTags)
+                }
             }
         }
     }
@@ -107,13 +113,23 @@ struct PaintingScannerView: View {
         ScrollView {
             VStack(spacing: 16) {
                 if let photo = booking.photos?.first, let url = URL(string: photo) {
-                    CachedAsyncImage(url: url, contentMode: .fit, maxDimension: 1000)
+                    CachedAsyncImage(url: url, contentMode: .fit, maxDimension: 2048)
                         .frame(maxWidth: .infinity)
                         .frame(height: 240)
                         .background(PPBrand.clay100.opacity(0.35))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(AppFont.body(11, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(6)
+                                .background(PPBrand.charcoal.opacity(0.6))
+                                .clipShape(Circle())
+                                .padding(10)
+                        }
                         .padding(.horizontal, 24)
                         .padding(.top, 24)
+                        .onTapGesture { showPhotoModal = true }
                 } else {
                     VStack(spacing: 6) {
                         Image(systemName: "camera")

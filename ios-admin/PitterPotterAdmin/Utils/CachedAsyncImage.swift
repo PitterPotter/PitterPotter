@@ -12,8 +12,8 @@ struct CachedAsyncImage: View {
 
     private static let cache: NSCache<NSURL, UIImage> = {
         let cache = NSCache<NSURL, UIImage>()
-        cache.countLimit = 30           // Max 30 images in memory
-        cache.totalCostLimit = 10_000_000 // Max 10MB memory
+        cache.countLimit = 80             // Max 80 images in memory
+        cache.totalCostLimit = 250_000_000 // Max ~250MB — must hold full-res modal images
         return cache
     }()
     private static let session: URLSession = {
@@ -37,7 +37,14 @@ struct CachedAsyncImage: View {
     private var displayImage: UIImage? {
         if let image { return image }
         guard let url else { return nil }
-        return Self.cache.object(forKey: url as NSURL)
+        return Self.cached(for: url, minDimension: maxDimension)
+    }
+
+    /// Returns the cached image only when it is at least as detailed as the
+    /// requested size — a thumbnail must never satisfy a full-screen request.
+    private static func cached(for url: URL, minDimension: CGFloat) -> UIImage? {
+        guard let img = cache.object(forKey: url as NSURL) else { return nil }
+        return max(img.size.width, img.size.height) >= minDimension ? img : nil
     }
 
     var body: some View {
@@ -73,7 +80,7 @@ struct CachedAsyncImage: View {
             await MainActor.run { failed = true }
             return
         }
-        if let cached = Self.cache.object(forKey: url as NSURL) {
+        if let cached = Self.cached(for: url, minDimension: maxDimension) {
             await MainActor.run {
                 image = cached
                 failed = false

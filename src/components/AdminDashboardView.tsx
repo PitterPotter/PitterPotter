@@ -5306,15 +5306,56 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       )}
 
       {/* Scanned collection confirm */}
-      {scanCollectTarget && (
+      {scanCollectTarget && (() => {
+        const photos = scanCollectTarget.photos ?? [];
+        const tags = Object.values(scanCollectTarget.photoTags ?? {}).flat();
+        const location = tags.find(t => t.status === 'location' && t.label)?.label
+          ?? (tags.length ? [...new Set(tags.map(t => t.label || TAG_LABELS[t.status] || t.status))].join(' · ') : null);
+        return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 sm:p-6">
-          <div className="bg-white p-6 border border-[#1B2D3C]/20 max-w-sm w-full space-y-4 shadow-lg sm:rounded-xl">
+          <div className="bg-white p-6 border border-[#1B2D3C]/20 max-w-md w-full space-y-4 shadow-lg sm:rounded-xl max-h-[85vh] overflow-y-auto">
             <h3 className="font-heading text-lg font-black text-[#1B2D3C]">Collect Pottery</h3>
             <div className="text-xs font-semibold text-[#1B2D3C]/70 space-y-1">
               <p><span className="font-black text-[#1B2D3C]">{scanCollectTarget.name}</span> — {scanCollectTarget.studio}</p>
               <p>{scanCollectTarget.date} · {scanCollectTarget.time} · {scanCollectTarget.paintersCount} painter{scanCollectTarget.paintersCount !== 1 ? 's' : ''}</p>
               {resolveStage(scanCollectTarget) && <p className="uppercase tracking-wider text-[10px] font-bold">Stage: {resolveStage(scanCollectTarget)}</p>}
             </div>
+            {location && (
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-[#DBE7E4] rounded-lg">
+                <MapPin className="w-4 h-4 text-[#1B2D3C] shrink-0" />
+                <span className="text-sm font-black text-[#1B2D3C]">{location}</span>
+              </div>
+            )}
+            {photos.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2">
+                {photos.map((url, i) => {
+                  const photoTags = scanCollectTarget.photoTags?.[i] || [];
+                  return (
+                    <div
+                      key={i}
+                      className="relative aspect-square rounded-lg overflow-hidden border border-[#1B2D3C]/15 cursor-pointer"
+                      onClick={() => { setModalImages(photos); setModalIndex(i); setModalPhotoTags(scanCollectTarget.photoTags); }}
+                    >
+                      <img src={url} alt={`${scanCollectTarget.name} pottery ${i + 1}`} className="w-full h-full object-cover" />
+                      {photoTags.map((t, ti) => (
+                        <div
+                          key={ti}
+                          className="absolute z-10"
+                          style={{ left: `${t.x}%`, top: `${t.y}%`, transform: 'translate(-50%, -50%)' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className={`px-1 py-0.5 text-[7px] font-black uppercase tracking-wider rounded-full whitespace-nowrap shadow-md ${getTagColor(t.status)}`}>
+                            {t.label ? `${TAG_LABELS[t.status] || t.status} - ${t.label}` : (TAG_LABELS[t.status] || t.status)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[10px] font-semibold text-[#1B2D3C]/50">No photos uploaded for this booking.</p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setScanCollectTarget(null)}
@@ -5331,7 +5372,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Scan outcome notice — hard to miss */}
       {scanNotice && (

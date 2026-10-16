@@ -15,6 +15,9 @@ class AuthViewModel: ObservableObject {
     @AppStorage("pp_staff_can_edit") private var storedCanEdit: Bool = false
     @AppStorage("pp_staff_can_walkin") private var storedCanWalkIn: Bool = false
     @AppStorage("pp_staff_can_delete") private var storedCanDelete: Bool = false
+    @AppStorage("pp_staff_can_epos_refunds") private var storedCanEposRefunds: Bool = false
+    @AppStorage("pp_staff_can_epos_discounts") private var storedCanEposDiscounts: Bool = false
+    @AppStorage("pp_staff_can_epos_products") private var storedCanEposProducts: Bool = false
     @AppStorage("pp_staff_allowed_studios") private var storedAllowedStudios: String = ""
 
     var isLoggedIn: Bool {
@@ -40,6 +43,9 @@ class AuthViewModel: ObservableObject {
             canEditBookings: storedCanEdit,
             canAddWalkIns: storedCanWalkIn,
             canDeleteBookings: storedCanDelete,
+            canEposRefunds: storedCanEposRefunds,
+            canEposDiscounts: storedCanEposDiscounts,
+            canEposManageProducts: storedCanEposProducts,
             allowedStudios: storedAllowedStudios.isEmpty ? nil : storedAllowedStudios.components(separatedBy: ","),
             sessionToken: token
         )
@@ -60,6 +66,9 @@ class AuthViewModel: ObservableObject {
             storedCanEdit = result.canEditBookings
             storedCanWalkIn = result.canAddWalkIns
             storedCanDelete = result.canDeleteBookings
+            storedCanEposRefunds = result.canEposRefunds
+            storedCanEposDiscounts = result.canEposDiscounts
+            storedCanEposProducts = result.canEposManageProducts
             storedAllowedStudios = result.allowedStudios?.joined(separator: ",") ?? ""
             Analytics.startSession()
             Analytics.track("login", properties: ["username": result.username, "role": result.role])
@@ -82,6 +91,9 @@ class AuthViewModel: ObservableObject {
         storedCanEdit = false
         storedCanWalkIn = false
         storedCanDelete = false
+        storedCanEposRefunds = false
+        storedCanEposDiscounts = false
+        storedCanEposProducts = false
         storedAllowedStudios = ""
         Analytics.track("logout")
     }

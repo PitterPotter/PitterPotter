@@ -11,6 +11,9 @@ struct Staff: Codable, Identifiable {
     let canEditBookings: Bool
     let canAddWalkIns: Bool
     let canDeleteBookings: Bool
+    let canEposRefunds: Bool
+    let canEposDiscounts: Bool
+    let canEposManageProducts: Bool
     let allowedStudios: [String]?
     let sessionToken: String
 
@@ -20,6 +23,9 @@ struct Staff: Codable, Identifiable {
         case canEditBookings
         case canAddWalkIns
         case canDeleteBookings
+        case canEposRefunds
+        case canEposDiscounts
+        case canEposManageProducts
         case allowedStudios
         case sessionToken
     }
@@ -49,6 +55,9 @@ struct StaffMember: Codable, Identifiable, Hashable {
     var canEditBookings: Bool
     var canAddWalkIns: Bool
     var canDeleteBookings: Bool
+    var canEposRefunds: Bool = false
+    var canEposDiscounts: Bool = false
+    var canEposManageProducts: Bool = false
     var allowedStudios: [String]?
     var createdAt: String?
 
@@ -58,6 +67,9 @@ struct StaffMember: Codable, Identifiable, Hashable {
         case canEditBookings = "can_edit_bookings"
         case canAddWalkIns = "can_add_walk_ins"
         case canDeleteBookings = "can_delete_bookings"
+        case canEposRefunds = "can_epos_refunds"
+        case canEposDiscounts = "can_epos_discounts"
+        case canEposManageProducts = "can_epos_manage_products"
         case allowedStudios = "allowed_studios"
         case createdAt = "created_at"
     }
@@ -216,6 +228,7 @@ enum NotificationType: String, Codable {
     case giftCardRedeemed = "gift_card_redeemed"
     case collectionReady = "collection_ready"
     case staffAction = "staff_action"
+    case eposRefund = "epos_refund"
 
     var icon: String {
         switch self {
@@ -228,6 +241,7 @@ enum NotificationType: String, Codable {
         case .giftCardRedeemed: return "giftcard"
         case .collectionReady: return "camera.circle.fill"
         case .staffAction: return "person.badge.shield.checkmark"
+        case .eposRefund: return "arrow.uturn.backward.circle.fill"
         }
     }
 
@@ -242,6 +256,7 @@ enum NotificationType: String, Codable {
         case .giftCardRedeemed: return "orange"
         case .collectionReady: return "teal"
         case .staffAction: return "gray"
+        case .eposRefund: return "red"
         }
     }
 }
@@ -310,6 +325,148 @@ extension NotificationType {
         case .giftCardRedeemed: return "Gift Card Redeemed"
         case .collectionReady: return "Collection Ready"
         case .staffAction: return "Staff Action"
+        case .eposRefund: return "EPOS Refund"
         }
     }
+}
+
+// MARK: - EPOS
+
+struct EposCategory: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var slug: String
+    var color: String
+    var sort_order: Int
+    var active: Bool
+}
+
+struct EposProduct: Codable, Identifiable, Hashable {
+    let id: String
+    var category_id: String?
+    var name: String
+    var sku: String?
+    var price: Double
+    var vat_treatment: String
+    var vat_rate: Double
+    var image_url: String?
+    var studios: [String]
+    var active: Bool
+    var sort_order: Int
+}
+
+struct EposDiscount: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var kind: String      // "percent" | "fixed"
+    var value: Double
+    var active: Bool
+    var sort_order: Int
+}
+
+struct EposOrderItem: Codable, Identifiable, Hashable {
+    let id: String
+    let order_id: String
+    let product_id: String?
+    var name: String
+    var unit_price: Double
+    var quantity: Int
+    var vat_treatment: String
+    var vat_rate: Double
+    var line_total: Double
+}
+
+struct EposPayment: Codable, Identifiable, Hashable {
+    let id: String
+    let order_id: String
+    var method: String        // cash | card | voucher | other
+    var provider: String
+    var amount: Double
+    var status: String        // completed | pending | failed | partially_refunded | refunded
+    var reference: String?
+    var gift_card_id: String?
+    var change_given: Double?
+    var refunded_amount: Double
+    var staff_name: String?
+    var created_at: String
+}
+
+struct EposOrder: Codable, Identifiable, Hashable {
+    let id: String
+    var order_number: String
+    var studio: String
+    var table_id: String?
+    var booking_id: String?
+    var customer_name: String?
+    var label: String?
+    var staff_name: String?
+    var status: String        // open | partial | paid | void
+    var subtotal: Double
+    var discount_total: Double
+    var vat_total: Double
+    var total: Double
+    var paid_total: Double
+    var discount_label: String?
+    var notes: String?
+    var created_at: String
+    var closed_at: String?
+
+    var outstanding: Double { max(0, total - paid_total) }
+}
+
+struct EposTable: Codable, Identifiable, Hashable {
+    var id: String { table_id }
+    let table_id: String
+    var label: String
+    var area: String
+    var max_capacity: Int
+}
+
+struct EposBootstrap: Codable {
+    let categories: [EposCategory]
+    let products: [EposProduct]
+    let discounts: [EposDiscount]
+    let cardProvider: String
+}
+
+struct EposOrderFull: Codable {
+    let order: EposOrder
+    let items: [EposOrderItem]
+    let payments: [EposPayment]
+}
+
+struct EposReceiptData: Codable, Identifiable {
+    var id: String { order.id }
+    let order: EposOrder
+    let items: [EposOrderItem]
+    let payments: [EposPayment]
+    let studio: EposStudioDetail?
+    let vatNumber: String?
+    let html: String
+}
+
+struct EposStudioDetail: Codable {
+    let address: String
+    let phone: String
+}
+
+struct EposSalesReport: Codable {
+    let orders: Int
+    let gross: Double
+    let vat: Double
+    let discounts: Double
+    let refunds: Double
+    let outstanding: Double
+    let byStudio: [String: Double]
+    let byMethod: [String: Double]
+    let byCategory: [String: Double]
+    let byVatRate: [String: EposVatBucket]
+    let byDay: [String: Double]
+    let rawOrders: [EposOrder]
+}
+
+struct EposVatBucket: Codable {
+    let net: Double
+    let vat: Double
+    let gross: Double
 }

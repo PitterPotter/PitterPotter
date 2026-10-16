@@ -45,6 +45,9 @@ struct SettingsView: View {
                     PermissionRow(label: "Edit Bookings", enabled: authVM.staff?.canEditBookings ?? false)
                     PermissionRow(label: "Add Walk-ins", enabled: authVM.staff?.canAddWalkIns ?? false)
                     PermissionRow(label: "Delete Bookings", enabled: authVM.staff?.canDeleteBookings ?? false)
+                    PermissionRow(label: "EPOS Discounts", enabled: authVM.staff?.canEposDiscounts ?? false)
+                    PermissionRow(label: "EPOS Refunds", enabled: authVM.staff?.canEposRefunds ?? false)
+                    PermissionRow(label: "EPOS Product Management", enabled: authVM.staff?.canEposManageProducts ?? false)
                 }
 
                 Section("API Configuration") {

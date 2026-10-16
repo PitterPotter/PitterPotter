@@ -210,6 +210,9 @@ struct EditStaffView: View {
     @State private var canEditBookings = false
     @State private var canAddWalkIns = false
     @State private var canDeleteBookings = false
+    @State private var canEposRefunds = false
+    @State private var canEposDiscounts = false
+    @State private var canEposManageProducts = false
     @State private var allowedPutney = false
     @State private var allowedWimbledon = false
 
@@ -241,6 +244,15 @@ struct EditStaffView: View {
                     Toggle("Add Walk-ins", isOn: $canAddWalkIns)
                         .disabled(isSuperAdmin)
                     Toggle("Delete Bookings", isOn: $canDeleteBookings)
+                        .disabled(isSuperAdmin)
+                }
+
+                Section("EPOS") {
+                    Toggle("EPOS Discounts", isOn: $canEposDiscounts)
+                        .disabled(isSuperAdmin)
+                    Toggle("EPOS Refunds", isOn: $canEposRefunds)
+                        .disabled(isSuperAdmin)
+                    Toggle("EPOS Product Management", isOn: $canEposManageProducts)
                         .disabled(isSuperAdmin)
                 }
 
@@ -291,6 +303,9 @@ struct EditStaffView: View {
             canEditBookings = member.canEditBookings
             canAddWalkIns = member.canAddWalkIns
             canDeleteBookings = member.canDeleteBookings
+            canEposRefunds = member.canEposRefunds
+            canEposDiscounts = member.canEposDiscounts
+            canEposManageProducts = member.canEposManageProducts
             if let studios = member.allowedStudios {
                 allowedPutney = studios.contains("Putney")
                 allowedWimbledon = studios.contains("Wimbledon")
@@ -323,6 +338,9 @@ struct EditStaffView: View {
             canEditBookings: isSuperAdmin || canEditBookings,
             canAddWalkIns: isSuperAdmin || canAddWalkIns,
             canDeleteBookings: isSuperAdmin || canDeleteBookings,
+            canEposRefunds: isSuperAdmin || canEposRefunds,
+            canEposDiscounts: isSuperAdmin || canEposDiscounts,
+            canEposManageProducts: isSuperAdmin || canEposManageProducts,
             allowedStudios: studios,
             createdAt: nil
         )

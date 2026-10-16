@@ -21,6 +21,7 @@ enum APIConfig {
     static let sampleDataEndpoint = "\(supabaseURL)/functions/v1/sample-data"
     static let pageSettingsEndpoint = "\(supabaseURL)/functions/v1/page-settings"
     static let notificationsEndpoint = "\(supabaseURL)/functions/v1/admin-notifications"
+    static let eposEndpoint = "\(supabaseURL)/functions/v1/epos"
 }
 
 // MARK: - API Client
@@ -281,6 +282,9 @@ actor APIClient {
                 "canEditBookings": member.canEditBookings,
                 "canAddWalkIns": member.canAddWalkIns,
                 "canDeleteBookings": member.canDeleteBookings,
+                "canEposRefunds": member.canEposRefunds,
+                "canEposDiscounts": member.canEposDiscounts,
+                "canEposManageProducts": member.canEposManageProducts,
                 "allowedStudios": member.allowedStudios ?? [],
             ],
         ]
@@ -313,6 +317,9 @@ actor APIClient {
             "canEditBookings": member.canEditBookings,
             "canAddWalkIns": member.canAddWalkIns,
             "canDeleteBookings": member.canDeleteBookings,
+            "canEposRefunds": member.canEposRefunds,
+            "canEposDiscounts": member.canEposDiscounts,
+            "canEposManageProducts": member.canEposManageProducts,
             "allowedStudios": member.allowedStudios ?? [],
         ]
         if let pw = password, !pw.isEmpty {
@@ -1478,6 +1485,195 @@ actor APIClient {
             throw APIError.invalidResponse
         }
     }
+    // MARK: - EPOS
+
+    private func eposCall<T: Decodable>(action: String, staff: Staff, extra: [String: Any] = [:]) async throws -> T {
+        var request = URLRequest(url: URL(string: APIConfig.eposEndpoint)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(APIConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+
+        var body: [String: Any] = [
+            "action": action,
+            "username": staff.username,
+            "sessionToken": staff.sessionToken,
+        ]
+        for (k, v) in extra { body[k] = v }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard http.statusCode == 200 else {
+            let error = try? JSONDecoder().decode(ErrorResponse.self, from: data)
+            throw APIError.serverError(error?.error ?? "EPOS request failed (\(http.statusCode))")
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    func eposBootstrap(studio: String, staff: Staff) async throws -> EposBootstrap {
+        try await eposCall(action: "bootstrap", staff: staff, extra: ["studio": studio])
+    }
+
+    func eposListTables(studio: String, staff: Staff) async throws -> [EposTable] {
+        let r: [String: [EposTable]] = try await eposCall(action: "listTables", staff: staff, extra: ["studio": studio])
+        return r["tables"] ?? []
+    }
+
+    func eposOpenOrders(studio: String, tableId: String? = nil, staff: Staff) async throws -> [EposOrder] {
+        var extra: [String: Any] = ["studio": studio]
+        if let tableId { extra["tableId"] = tableId }
+        let r: [String: [EposOrder]] = try await eposCall(action: "openOrders", staff: staff, extra: extra)
+        return r["orders"] ?? []
+    }
+
+    func eposCreateOrder(studio: String, tableId: String?, bookingId: String?, customerName: String?, label: String?, staff: Staff) async throws -> EposOrder {
+        var extra: [String: Any] = ["studio": studio]
+        if let tableId { extra["tableId"] = tableId }
+        if let bookingId { extra["bookingId"] = bookingId }
+        if let customerName { extra["customerName"] = customerName }
+        if let label { extra["label"] = label }
+        struct R: Codable { let order: EposOrder }
+        let r: R = try await eposCall(action: "createOrder", staff: staff, extra: extra)
+        return r.order
+    }
+
+    func eposGetOrder(orderId: String, staff: Staff) async throws -> EposOrderFull {
+        try await eposCall(action: "getOrder", staff: staff, extra: ["orderId": orderId])
+    }
+
+    func eposAddItem(orderId: String, productId: String? = nil, customName: String? = nil, customPrice: Double? = nil, customVatTreatment: String? = nil, quantity: Int = 1, staff: Staff) async throws -> EposOrder {
+        var extra: [String: Any] = ["orderId": orderId, "quantity": quantity]
+        if let productId { extra["productId"] = productId }
+        if let customName { extra["customName"] = customName }
+        if let customPrice { extra["customPrice"] = customPrice }
+        if let customVatTreatment { extra["customVatTreatment"] = customVatTreatment }
+        struct R: Codable { let order: EposOrder }
+        let r: R = try await eposCall(action: "addItem", staff: staff, extra: extra)
+        return r.order
+    }
+
+    func eposUpdateItemQty(itemId: String, quantity: Int, staff: Staff) async throws -> EposOrder {
+        struct R: Codable { let order: EposOrder }
+        let r: R = try await eposCall(action: "updateItemQty", staff: staff, extra: ["itemId": itemId, "quantity": quantity])
+        return r.order
+    }
+
+    func eposRemoveItem(itemId: String, staff: Staff) async throws -> EposOrder {
+        struct R: Codable { let order: EposOrder }
+        let r: R = try await eposCall(action: "removeItem", staff: staff, extra: ["itemId": itemId])
+        return r.order
+    }
+
+    func eposApplyDiscount(orderId: String, discountId: String? = nil, kind: String? = nil, value: Double? = nil, label: String? = nil, staff: Staff) async throws -> EposOrder {
+        var extra: [String: Any] = ["orderId": orderId]
+        if let discountId { extra["discountId"] = discountId }
+        if let kind { extra["kind"] = kind }
+        if let value { extra["value"] = value }
+        if let label { extra["label"] = label }
+        struct R: Codable { let order: EposOrder }
+        let r: R = try await eposCall(action: "applyDiscount", staff: staff, extra: extra)
+        return r.order
+    }
+
+    func eposRemoveDiscount(orderId: String, staff: Staff) async throws -> EposOrder {
+        struct R: Codable { let order: EposOrder }
+        let r: R = try await eposCall(action: "removeDiscount", staff: staff, extra: ["orderId": orderId])
+        return r.order
+    }
+
+    func eposPay(orderId: String, method: String, amount: Double, tendered: Double? = nil, voucherCode: String? = nil, idempotencyKey: String, staff: Staff) async throws -> (payment: EposPayment, order: EposOrder) {
+        var extra: [String: Any] = ["orderId": orderId, "method": method, "amount": amount, "idempotencyKey": idempotencyKey]
+        if let tendered { extra["tendered"] = tendered }
+        if let voucherCode { extra["voucherCode"] = voucherCode }
+        struct R: Codable { let payment: EposPayment; let order: EposOrder }
+        let r: R = try await eposCall(action: "pay", staff: staff, extra: extra)
+        return (r.payment, r.order)
+    }
+
+    func eposCheckPayment(paymentId: String, staff: Staff) async throws -> EposPayment {
+        struct R: Codable { let payment: EposPayment }
+        let r: R = try await eposCall(action: "checkPayment", staff: staff, extra: ["paymentId": paymentId])
+        return r.payment
+    }
+
+    func eposVoidOrder(orderId: String, reason: String, staff: Staff) async throws {
+        struct Ok: Codable { let success: Bool }
+        let _: Ok = try await eposCall(action: "voidOrder", staff: staff, extra: ["orderId": orderId, "reason": reason])
+    }
+
+    func eposRefundPayment(paymentId: String, amount: Double? = nil, staff: Staff) async throws -> EposOrder {
+        var extra: [String: Any] = ["paymentId": paymentId]
+        if let amount { extra["amount"] = amount }
+        struct R: Codable { let order: EposOrder }
+        let r: R = try await eposCall(action: "refundPayment", staff: staff, extra: extra)
+        return r.order
+    }
+
+    func eposLinkBooking(orderId: String, bookingId: String, staff: Staff) async throws {
+        struct Ok: Codable { let success: Bool }
+        let _: Ok = try await eposCall(action: "linkBooking", staff: staff, extra: ["orderId": orderId, "bookingId": bookingId])
+    }
+
+    func eposLinkTable(orderId: String, tableId: String?, staff: Staff) async throws {
+        var extra: [String: Any] = ["orderId": orderId]
+        if let tableId { extra["tableId"] = tableId }
+        struct Ok: Codable { let success: Bool }
+        let _: Ok = try await eposCall(action: "linkTable", staff: staff, extra: extra)
+    }
+
+    func eposListProductsAdmin(staff: Staff) async throws -> (categories: [EposCategory], products: [EposProduct], discounts: [EposDiscount]) {
+        struct R: Codable { let categories: [EposCategory]; let products: [EposProduct]; let discounts: [EposDiscount] }
+        let r: R = try await eposCall(action: "listProductsAdmin", staff: staff)
+        return (r.categories, r.products, r.discounts)
+    }
+
+    func eposSaveProduct(_ product: [String: Any], staff: Staff) async throws -> EposProduct {
+        struct R: Codable { let product: EposProduct }
+        let r: R = try await eposCall(action: "saveProduct", staff: staff, extra: ["product": product])
+        return r.product
+    }
+
+    func eposDeleteProduct(productId: String, staff: Staff) async throws {
+        struct Ok: Codable { let success: Bool }
+        let _: Ok = try await eposCall(action: "deleteProduct", staff: staff, extra: ["productId": productId])
+    }
+
+    func eposSaveCategory(_ category: [String: Any], staff: Staff) async throws -> EposCategory {
+        struct R: Codable { let category: EposCategory }
+        let r: R = try await eposCall(action: "saveCategory", staff: staff, extra: ["category": category])
+        return r.category
+    }
+
+    func eposDeleteCategory(categoryId: String, staff: Staff) async throws {
+        struct Ok: Codable { let success: Bool }
+        let _: Ok = try await eposCall(action: "deleteCategory", staff: staff, extra: ["categoryId": categoryId])
+    }
+
+    func eposSaveDiscount(_ discount: [String: Any], staff: Staff) async throws -> EposDiscount {
+        struct R: Codable { let discount: EposDiscount }
+        let r: R = try await eposCall(action: "saveDiscount", staff: staff, extra: ["discount": discount])
+        return r.discount
+    }
+
+    func eposGetReceipt(orderId: String, staff: Staff) async throws -> EposReceiptData {
+        try await eposCall(action: "getReceipt", staff: staff, extra: ["orderId": orderId])
+    }
+
+    func eposEmailReceipt(orderId: String, email: String, staff: Staff) async throws {
+        struct Ok: Codable { let success: Bool }
+        let _: Ok = try await eposCall(action: "emailReceipt", staff: staff, extra: ["orderId": orderId, "email": email])
+    }
+
+    func eposSalesReport(studio: String? = nil, from: String? = nil, to: String? = nil, staff: Staff) async throws -> EposSalesReport {
+        var extra: [String: Any] = [:]
+        if let studio { extra["studio"] = studio }
+        if let from { extra["from"] = from }
+        if let to { extra["to"] = to }
+        return try await eposCall(action: "salesReport", staff: staff, extra: extra)
+    }
 }
 
 // MARK: - Helpers
@@ -1488,6 +1684,7 @@ extension Booking {
         let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
         return dict
     }
+
 }
 
 // MARK: - Response Types

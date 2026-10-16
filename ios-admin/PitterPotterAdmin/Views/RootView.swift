@@ -8,6 +8,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case collected = "Collected"
     case allFiles = "All Files"
     case scan = "Scan"
+    case epos = "Till"
     case floorPlan = "Floor Plan"
     case calendar = "Calendar"
     case capacity = "Capacity"
@@ -33,6 +34,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .collected: return "tray.full.fill"
         case .allFiles: return "folder.fill"
         case .scan: return "qrcode.viewfinder"
+        case .epos: return "creditcard.and.123"
         case .floorPlan: return "map"
         case .calendar: return "calendar"
         case .capacity: return "chart.bar.xaxis"
@@ -73,6 +75,8 @@ enum AppTab: String, CaseIterable, Identifiable {
             AllFilesView().environmentObject(bookingsVM)
         case .scan:
             EmptyView()
+        case .epos:
+            EposView().environmentObject(bookingsVM).environmentObject(authVM)
         case .floorPlan:
             FloorPlanTabView().environmentObject(bookingsVM)
         case .calendar:

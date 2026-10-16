@@ -78,6 +78,10 @@ struct MainTabView: View {
                         .environmentObject(bookingsVM)
                 case .scan:
                     EmptyView()
+                case .epos:
+                    EposView()
+                        .environmentObject(authVM)
+                        .environmentObject(bookingsVM)
                 case .floorPlan:
                     FloorPlanTabView().environmentObject(bookingsVM)
                 case .giftCards:
@@ -204,6 +208,7 @@ struct WebTabBar: View {
         t.append((.collected, "Collected", nil))
         t.append((.allFiles, "All Files", nil))
         t.append((.scan, "Scan QR", nil))
+        t.append((.epos, "Till", nil))
         t.append((.floorPlan, "Floor Plan", nil))
         t.append((.giftCards, "Gift Vouchers", nil))
         if isSuperAdmin {

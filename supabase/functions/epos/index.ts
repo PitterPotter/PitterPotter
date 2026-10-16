@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
 
       let bookingName: string | null = null;
       if (isNonEmptyString(bookingId)) {
-        const { data: b } = await supabase.from('bookings').select('id,name,studio').eq('id', bookingId).single();
+        const { data: b } = await supabase.from('bookings').select('booking_id,name,studio').eq('booking_id', bookingId).single();
         if (!b) return err('Booking not found', corsHeaders, 404);
         if (b.studio !== studio) return err('Booking belongs to a different studio', corsHeaders);
         bookingName = b.name;
@@ -380,7 +380,7 @@ Deno.serve(async (req) => {
       if (!(await studioOk(orderId))) return err('Access denied', corsHeaders, 403);
       const upd: Record<string, unknown> = {};
       if (isNonEmptyString(bookingId)) {
-        const { data: b } = await supabase.from('bookings').select('name,studio').eq('id', bookingId).single();
+        const { data: b } = await supabase.from('bookings').select('name,studio').eq('booking_id', bookingId).single();
         if (!b) return err('Booking not found', corsHeaders, 404);
         upd.booking_id = bookingId;
         upd.customer_name = b.name;

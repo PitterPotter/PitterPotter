@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS epos_orders (
   order_number TEXT NOT NULL UNIQUE,
   studio TEXT NOT NULL CHECK (studio IN ('Putney','Wimbledon')),
   table_id TEXT,
-  booking_id UUID REFERENCES bookings(id) ON DELETE SET NULL,
+  booking_id TEXT REFERENCES bookings(booking_id) ON DELETE SET NULL,
   customer_name TEXT,
   label TEXT,                    -- e.g. 'Seat 1' / payer name for split bills
   staff_id UUID REFERENCES staff(id) ON DELETE SET NULL,

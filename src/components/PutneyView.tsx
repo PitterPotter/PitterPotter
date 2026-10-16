@@ -14,8 +14,12 @@ interface PutneyViewProps {
 }
 
 const BASE_OPENING_HOURS = [
-  { day: 'Tuesday - Saturday', time: '10:00am - 6:00pm' },
-  { day: 'Sunday', time: '11:00am - 5:00pm' },
+  { day: 'Tuesday', time: '10:00am - 6:00pm' },
+  { day: 'Wednesday', time: '10:00am - 6:00pm' },
+  { day: 'Thursday', time: '10:00am - 6:00pm' },
+  { day: 'Friday', time: '10:00am - 6:00pm' },
+  { day: 'Saturday', time: '10:00am - 6:00pm' },
+  { day: 'Sunday', time: '10:00am - 6:00pm' },
 ];
 
 

@@ -12,6 +12,60 @@ interface HomeViewProps {
  disabledPages?: Set<string>;
 }
 
+const WEEK_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+const DAY_LABELS: Record<(typeof WEEK_DAYS)[number], string> = {
+  monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday',
+  friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday',
+};
+
+const DEFAULT_OPENING_HOURS: Record<'putney' | 'wimbledon', Record<(typeof WEEK_DAYS)[number], string>> = {
+  putney: {
+    monday: 'Closed (except school holidays)',
+    tuesday: '10am – 6pm', wednesday: '10am – 6pm', thursday: '10am – 6pm',
+    friday: '10am – 6pm', saturday: '10am – 6pm', sunday: '10am – 6pm',
+  },
+  wimbledon: {
+    monday: 'Closed (except school holidays)',
+    tuesday: '10am – 6pm', wednesday: '10am – 6pm',
+    thursday: '10am – 9pm', friday: '10am – 9pm', saturday: '10am – 9pm',
+    sunday: '10am – 6:30pm',
+  },
+};
+
+// One row per day, times right-aligned, today highlighted. Every value
+// stays inline-editable in admin mode via EditableText.
+function StudioHours({ studio, adminMode }: { studio: 'putney' | 'wimbledon'; adminMode: boolean }) {
+  const todayIdx = (new Date().getDay() + 6) % 7; // 0=Monday … 6=Sunday
+  return (
+    <table className="text-xs w-full">
+      <tbody>
+        {WEEK_DAYS.map((day, i) => {
+          const isToday = i === todayIdx;
+          return (
+            <tr key={day}>
+              <td className={`py-1 pr-3 ${isToday ? 'text-[#1B2D3C] font-bold' : 'text-[#1B2D3C]/80'}`}>
+                {DAY_LABELS[day]}
+                {isToday && (
+                  <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 rounded px-1.5 py-0.5 align-middle">Today</span>
+                )}
+              </td>
+              <td className="py-1 text-right">
+                <EditableText
+                  contentKey={`${studio}_hours_${day}`}
+                  page="home"
+                  defaultValue={DEFAULT_OPENING_HOURS[studio][day]}
+                  adminMode={adminMode}
+                  className={`text-xs ${isToday ? 'text-[#1B2D3C] font-bold' : 'text-[#1B2D3C]/60'}`}
+                />
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 export default function HomeView({ setCurrentPage, adminMode = false, disabledPages = new Set() }: HomeViewProps) {
  return (
  <div id="home-view" className="space-y-16 pb-20">
@@ -103,13 +157,7 @@ export default function HomeView({ setCurrentPage, adminMode = false, disabledPa
  </div>
  <div className="flex items-start gap-2.5">
  <Clock className="w-4 h-4 text-[#1B2D3C] shrink-0 mt-0.5" />
- <table className="text-xs w-full">
- <tbody>
- <tr><td className="pr-3"><EditableText contentKey="putney_hours_monday_label" page="home" defaultValue="Monday" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td><td className="text-[#1B2D3C]/60"><EditableText contentKey="putney_hours_monday" page="home" defaultValue="Closed (except school holidays)" adminMode={adminMode} className="text-xs text-[#1B2D3C]/60" /></td></tr>
- <tr><td className="pr-3"><EditableText contentKey="putney_hours_tues_sat_label" page="home" defaultValue="Tuesday – Saturday" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td><td><EditableText contentKey="putney_hours_tues_sat" page="home" defaultValue="10am – 6pm" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td></tr>
- <tr><td className="pr-3"><EditableText contentKey="putney_hours_sunday_label" page="home" defaultValue="Sunday" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td><td><EditableText contentKey="putney_hours_sunday" page="home" defaultValue="11am – 5pm" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td></tr>
- </tbody>
- </table>
+ <StudioHours studio="putney" adminMode={adminMode} />
  </div>
  </div>
  <button
@@ -154,13 +202,7 @@ export default function HomeView({ setCurrentPage, adminMode = false, disabledPa
  </div>
  <div className="flex items-start gap-2.5">
  <Clock className="w-4 h-4 text-[#1B2D3C] shrink-0 mt-0.5" />
- <table className="text-xs w-full">
- <tbody>
- <tr><td className="pr-3"><EditableText contentKey="wimbledon_hours_monday_label" page="home" defaultValue="Monday" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td><td className="text-[#1B2D3C]/60"><EditableText contentKey="wimbledon_hours_monday" page="home" defaultValue="Closed (except school holidays)" adminMode={adminMode} className="text-xs text-[#1B2D3C]/60" /></td></tr>
- <tr><td className="pr-3"><EditableText contentKey="wimbledon_hours_tues_sat_label" page="home" defaultValue="Tuesday – Saturday" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td><td><EditableText contentKey="wimbledon_hours_tues_sat" page="home" defaultValue="10am – 6pm" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td></tr>
- <tr><td className="pr-3"><EditableText contentKey="wimbledon_hours_sunday_label" page="home" defaultValue="Sunday" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td><td><EditableText contentKey="wimbledon_hours_sunday" page="home" defaultValue="11am – 5pm" adminMode={adminMode} className="text-xs text-[#1B2D3C]/80" /></td></tr>
- </tbody>
- </table>
+ <StudioHours studio="wimbledon" adminMode={adminMode} />
  </div>
  </div>
  <button

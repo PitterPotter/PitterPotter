@@ -39,11 +39,12 @@ const SESSION_BADGE: Record<string, string> = {
 };
 
 function StatBubble({
-  label, value, colour,
+  label, value, colour, onClick,
 }: {
   label: string;
   value: number;
   colour: 'slate' | 'amber' | 'green' | 'red';
+  onClick?: () => void;
 }) {
   const colourMap = {
     slate: 'bg-[#F8FAFB] border-[#1B2D3C]/10 text-[#1B2D3C]',
@@ -52,7 +53,10 @@ function StatBubble({
     red: 'bg-rose-50 border-rose-200 text-rose-700',
   };
   return (
-    <div className={`text-center px-4 py-3 rounded-2xl border ${colourMap[colour]}`}>
+    <div
+      onClick={onClick}
+      className={`text-center px-4 py-3 rounded-2xl border ${colourMap[colour]} ${onClick ? 'cursor-pointer hover:shadow-sm' : ''}`}
+    >
       <p className="text-2xl font-black leading-none">{value}</p>
       <p className="text-[10px] font-bold uppercase tracking-wider mt-1 opacity-70">{label}</p>
     </div>
@@ -341,6 +345,7 @@ export default function DayDashboard({
   canUpdateStatus,
 }: DayDashboardProps) {
   const [selectedBooking, setSelectedBooking] = useState<BookingInquiry | null>(null);
+  const [noshowOpen, setNoshowOpen] = useState(true);
 
   const dayBookings = useMemo(() => {
     return bookings.filter(b => b.date === date && b.status !== 'cancelled');
@@ -381,7 +386,11 @@ export default function DayDashboard({
   };
 
   const handleNoShow = (id: string) => {
-    onUpdateStatus(id, 'no_show');
+    const booking = bookings.find(b => b.id === id);
+    if (!booking) return;
+    if (window.confirm(`Move ${booking.name} to no-show?`)) {
+      onUpdateStatus(id, 'no_show');
+    }
   };
 
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -427,7 +436,12 @@ export default function DayDashboard({
         <StatBubble label="Seats" value={totalSeats} colour="slate" />
         <StatBubble label="Seated" value={seatedColumn.length} colour="amber" />
         <StatBubble label="Complete" value={completeColumn.length} colour="green" />
-        <StatBubble label="No-Show" value={noshowColumn.length} colour="red" />
+        <StatBubble
+          label="No-Show"
+          value={noshowColumn.length}
+          colour="red"
+          onClick={noshowColumn.length > 0 ? () => setNoshowOpen(v => !v) : undefined}
+        />
       </div>
 
       {/* 3-column kanban — no-shows are rare; the count stays in the stat bubble */}
@@ -509,6 +523,41 @@ export default function DayDashboard({
         </div>
 
       </div>
+
+      {/* No-Show section — collapsed toggle; Back on a card restores to Bookings */}
+      {noshowColumn.length > 0 && (
+        <div className="bg-stone-50/60 border border-stone-300/60 rounded-xl p-4 space-y-3">
+          <button
+            onClick={() => setNoshowOpen(v => !v)}
+            className="flex items-center justify-between w-full cursor-pointer"
+          >
+            <h3 className="text-sm font-black text-stone-600 uppercase tracking-wider">No-Show</h3>
+            <span className="flex items-center gap-1.5 text-stone-500">
+              <span className="px-2 py-0.5 bg-stone-200 text-stone-700 text-[10px] font-black rounded-full">{noshowColumn.length}</span>
+              {noshowOpen ? <ChevronRight className="w-4 h-4 rotate-90" /> : <ChevronRight className="w-4 h-4" />}
+            </span>
+          </button>
+          {noshowOpen && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {noshowColumn.map(b => (
+                <BookingCard
+                  key={b.id}
+                  booking={b}
+                  column="noshow"
+                  canUpdate={canUpdateStatus}
+                  showStudio={showStudio}
+                  onMove={handleMove}
+                  onClick={setSelectedBooking}
+                  onSetPaintedFlag={onSetPaintedFlag}
+                />
+              ))}
+            </div>
+          )}
+          {noshowOpen && (
+            <p className="text-[10px] font-semibold text-stone-400">Tap Back on a card to restore the booking.</p>
+          )}
+        </div>
+      )}
 
       {/* Hidden photo picker — seated cards' Photo button targets this */}
       <input

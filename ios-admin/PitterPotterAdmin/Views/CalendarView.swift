@@ -984,6 +984,7 @@ struct DayDashboardView: View {
     @State private var photoBooking: Booking? = nil
     @State private var showingGhostBooking = false
     @State private var cancelTarget: Booking? = nil
+    @State private var noshowTarget: Booking? = nil
 
     private var staffStudio: String? {
         guard let studios = authVM.staff?.allowedStudios, studios.count == 1 else { return nil }
@@ -1061,7 +1062,7 @@ struct DayDashboardView: View {
                         columnType: .bookings,
                         canUpdate: canUpdateStatus,
                         onMove: handleMove,
-                        onNoShow: handleNoShow,
+                        onNoShow: { id in noshowTarget = bookings.first(where: { $0.id == id }) },
                         onCancel: { id in cancelTarget = bookings.first(where: { $0.id == id }) },
                         onTap: { selectedBooking = $0 },
                         onAddPhoto: { photoBooking = $0 },
@@ -1099,6 +1100,23 @@ struct DayDashboardView: View {
                         staffStudio: staffStudio
                     )
                     .frame(width: 280)
+
+                    if !noshowColumn.isEmpty {
+                        KanbanColumn(
+                            title: "No-Show",
+                            count: noshowColumn.count,
+                            bookings: noshowColumn,
+                            columnType: .noshow,
+                            canUpdate: canUpdateStatus,
+                            onMove: handleMove,
+                            onNoShow: nil,
+                            onTap: { selectedBooking = $0 },
+                            onAddPhoto: { photoBooking = $0 },
+                            onSetPaintedFlag: { b, flag in setPaintedFlag(b, flag) },
+                            staffStudio: staffStudio
+                        )
+                        .frame(width: 280)
+                    }
                 }
                 .padding(.bottom, 8)
             }
@@ -1130,6 +1148,22 @@ struct DayDashboardView: View {
             Button("Keep Booking", role: .cancel) { cancelTarget = nil }
         } message: {
             Text("The customer will be marked as cancelled and the slot freed up.")
+        }
+        .confirmationDialog(
+            "Move \(noshowTarget?.name ?? "") to no-show?",
+            isPresented: Binding(
+                get: { noshowTarget != nil },
+                set: { if !$0 { noshowTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Mark No-Show", role: .destructive) {
+                if let b = noshowTarget { handleNoShow(id: b.id) }
+                noshowTarget = nil
+            }
+            Button("Keep Booking", role: .cancel) { noshowTarget = nil }
+        } message: {
+            Text("The customer will be moved to the No-Show column. You can restore them with Back.")
         }
     }
 

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Users, CheckCircle, Clock, MapPin, Phone, Mail, Gift,
-  FileText, X, ChevronRight, ChevronLeft, UserCheck, Camera, MoreVertical, Zap, RotateCcw,
+  FileText, X, ChevronRight, ChevronLeft, UserCheck, Camera, MoreVertical, Zap, RotateCcw, Receipt,
 } from 'lucide-react';
 import { BookingInquiry } from '../types';
 
@@ -16,6 +16,7 @@ interface DayDashboardProps {
   onAddBooking: (sessionType: string) => void;
   onUploadPhoto?: (booking: BookingInquiry, files: File[]) => void;
   onSetPaintedFlag?: (booking: BookingInquiry, flag: 'rush' | 'return_to_finish' | null) => void;
+  onBill?: (booking: BookingInquiry) => void;
   canUpdateStatus: boolean;
   canAddWalkIn: boolean;
 }
@@ -74,6 +75,7 @@ function BookingCard({
   onAddPhoto,
   onClick,
   onSetPaintedFlag,
+  onBill,
 }: {
   booking: BookingInquiry;
   column: 'bookings' | 'seated' | 'complete' | 'noshow';
@@ -85,6 +87,7 @@ function BookingCard({
   onAddPhoto?: (booking: BookingInquiry) => void;
   onClick: (booking: BookingInquiry) => void;
   onSetPaintedFlag?: (booking: BookingInquiry, flag: 'rush' | 'return_to_finish' | null) => void;
+  onBill?: (booking: BookingInquiry) => void;
 }) {
   const [flagMenuOpen, setFlagMenuOpen] = useState(false);
   return (
@@ -128,6 +131,15 @@ function BookingCard({
                 title="Add photos to this booking"
               >
                 <Camera className="w-3 h-3" /> Photo
+              </button>
+            )}
+            {onBill && (column === 'seated' || column === 'complete') && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onBill(booking); }}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 -my-0.5 bg-[#1B2D3C] hover:bg-[#243B53] border border-[#1B2D3C]/20 text-white text-[9px] font-bold uppercase tracking-wider rounded transition-colors cursor-pointer"
+                title="Open/create a till order for this booking"
+              >
+                <Receipt className="w-3 h-3" /> Bill
               </button>
             )}
             {showStudio && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{booking.studio}</span>}
@@ -342,6 +354,7 @@ export default function DayDashboard({
   onEditBooking,
   onUploadPhoto,
   onSetPaintedFlag,
+  onBill,
   canUpdateStatus,
 }: DayDashboardProps) {
   const [selectedBooking, setSelectedBooking] = useState<BookingInquiry | null>(null);
@@ -490,6 +503,7 @@ export default function DayDashboard({
                 showStudio={showStudio}
                 onMove={handleMove}
                 onAddPhoto={handleAddPhoto}
+                onBill={onBill}
                 onClick={setSelectedBooking}
                 onSetPaintedFlag={onSetPaintedFlag}
               />
@@ -515,6 +529,7 @@ export default function DayDashboard({
                 showStudio={showStudio}
                 onMove={handleMove}
                 onAddPhoto={handleAddPhoto}
+                onBill={onBill}
                 onClick={setSelectedBooking}
                 onSetPaintedFlag={onSetPaintedFlag}
               />

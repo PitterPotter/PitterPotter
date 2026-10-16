@@ -11,6 +11,8 @@ struct CalendarView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var bookingsVM: BookingsViewModel
     @EnvironmentObject var toastManager: ToastManager
+    /// Called when staff tap "Bill" on a seated booking — MainTabView switches to the Till tab.
+    var onNavigateToEpos: (() -> Void)? = nil
 
     @State private var calendarMonth = Date()
     @State private var selectedDate: String? = nil
@@ -45,7 +47,11 @@ struct CalendarView: View {
                         canUpdateStatus: authVM.staff?.canUpdateStatus ?? false,
                         bookingsVM: bookingsVM,
                         authVM: authVM,
-                        toastManager: toastManager
+                        toastManager: toastManager,
+                        onBill: { booking in
+                            bookingsVM.pendingEposBooking = booking
+                            onNavigateToEpos?()
+                        }
                     )
                 } else {
                     if searchText.isEmpty {
@@ -979,6 +985,7 @@ struct DayDashboardView: View {
     let bookingsVM: BookingsViewModel
     let authVM: AuthViewModel
     let toastManager: ToastManager
+    var onBill: ((Booking) -> Void)? = nil
 
     @State private var selectedBooking: Booking? = nil
     @State private var photoBooking: Booking? = nil
@@ -1081,6 +1088,7 @@ struct DayDashboardView: View {
                         onNoShow: nil,
                         onTap: { selectedBooking = $0 },
                         onAddPhoto: { photoBooking = $0 },
+                        onBill: onBill,
                         onSetPaintedFlag: { b, flag in setPaintedFlag(b, flag) },
                         staffStudio: staffStudio
                     )
@@ -1096,6 +1104,7 @@ struct DayDashboardView: View {
                         onNoShow: nil,
                         onTap: { selectedBooking = $0 },
                         onAddPhoto: { photoBooking = $0 },
+                        onBill: onBill,
                         onSetPaintedFlag: { b, flag in setPaintedFlag(b, flag) },
                         staffStudio: staffStudio
                     )
@@ -1301,6 +1310,7 @@ struct KanbanColumn: View {
     var onCancel: ((String) -> Void)? = nil
     let onTap: (Booking) -> Void
     let onAddPhoto: (Booking) -> Void
+    var onBill: ((Booking) -> Void)? = nil
     var onSetPaintedFlag: ((Booking, String?) -> Void)? = nil
     var staffStudio: String? = nil
 
@@ -1339,6 +1349,7 @@ struct KanbanColumn: View {
                         onCancel: onCancel,
                         onTap: { onTap(booking) },
                         onAddPhoto: onAddPhoto,
+                        onBill: onBill,
                         onSetPaintedFlag: onSetPaintedFlag,
                         staffStudio: staffStudio
                     )
@@ -1375,6 +1386,7 @@ struct KanbanBookingCard: View {
     var onCancel: ((String) -> Void)? = nil
     let onTap: () -> Void
     let onAddPhoto: (Booking) -> Void
+    var onBill: ((Booking) -> Void)? = nil
     var onSetPaintedFlag: ((Booking, String?) -> Void)? = nil
     var staffStudio: String? = nil
 
@@ -1440,18 +1452,35 @@ struct KanbanBookingCard: View {
                     .frame(height: 56)
                 }
 
-                Button {
-                    onAddPhoto(booking)
-                } label: {
-                    Label("Add Photo", systemImage: "camera.fill")
-                        .font(AppFont.body(10, weight: .bold))
-                        .foregroundStyle(PPBrand.charcoal)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(PPBrand.sage)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                HStack(spacing: 6) {
+                    Button {
+                        onAddPhoto(booking)
+                    } label: {
+                        Label("Add Photo", systemImage: "camera.fill")
+                            .font(AppFont.body(10, weight: .bold))
+                            .foregroundStyle(PPBrand.charcoal)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(PPBrand.sage)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+
+                    if let onBill, columnType == .seated || columnType == .complete {
+                        Button {
+                            onBill(booking)
+                        } label: {
+                            Label("Bill", systemImage: "receipt")
+                                .font(AppFont.body(10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(PPBrand.charcoal)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
 
                 HStack(spacing: 6) {
                     Text(booking.name)

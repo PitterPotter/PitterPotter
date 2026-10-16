@@ -16,6 +16,7 @@ interface DashboardOverviewProps {
   onAddWalkIn?: () => void;
   onUploadPhoto?: (booking: BookingInquiry, files: File[]) => void;
   onSetPaintedFlag?: (booking: BookingInquiry, flag: 'rush' | 'return_to_finish' | null) => void;
+  onBill?: (booking: BookingInquiry) => void;
   canUpdateStatus?: boolean;
   canAddWalkIn?: boolean;
 }
@@ -31,6 +32,7 @@ export default function DashboardOverview({
   onAddWalkIn,
   onUploadPhoto,
   onSetPaintedFlag,
+  onBill,
   canUpdateStatus,
   canAddWalkIn,
 }: DashboardOverviewProps) {
@@ -49,6 +51,7 @@ export default function DashboardOverview({
           onAddWalkIn={() => onAddWalkIn?.()}
           onUploadPhoto={onUploadPhoto}
           onSetPaintedFlag={onSetPaintedFlag}
+          onBill={onBill}
           onAddBooking={(sessionType) => onNavigateToAddBooking?.({ date: selectedDate, sessionType })}
           canUpdateStatus={canUpdateStatus ?? false}
           canAddWalkIn={canAddWalkIn ?? false}

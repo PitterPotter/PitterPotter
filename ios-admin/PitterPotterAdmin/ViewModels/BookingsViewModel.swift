@@ -27,6 +27,9 @@ class BookingsViewModel: ObservableObject {
     @Published var selectedBookingIds: Set<String> = []
     @Published var isBulkSelectMode: Bool = false
     @Published var selectedSessionType: String? = nil
+    /// Set when "Bill" is tapped on a day-view card — EposView opens/creates
+    /// the order for it, then clears it.
+    @Published var pendingEposBooking: Booking? = nil
 
     enum SortOption: String, CaseIterable {
         case dateDesc = "Newest Date"

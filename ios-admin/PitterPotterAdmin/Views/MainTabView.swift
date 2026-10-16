@@ -62,7 +62,7 @@ struct MainTabView: View {
                     DashboardOverviewView()
                         .environmentObject(bookingsVM)
                 case .bookings:
-                    CalendarView()
+                    CalendarView(onNavigateToEpos: { selectedTab = .epos })
                         .environmentObject(bookingsVM)
                 case .painted:
                     CollectionsView(initialStage: .painted)

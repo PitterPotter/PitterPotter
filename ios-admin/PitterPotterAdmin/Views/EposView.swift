@@ -123,6 +123,10 @@ struct EposView: View {
         .padding(12)
         .background(PPBrand.mist.ignoresSafeArea())
         .task { await load() }
+        .onChange(of: bookingsVM.pendingEposBooking?.id) { _ in
+            guard let b = bookingsVM.pendingEposBooking else { return }
+            Task { await handleBillBooking(b) }
+        }
         .alert("Error", isPresented: .constant(errorMsg != nil)) {
             Button("OK") { errorMsg = nil }
         } message: { Text(errorMsg ?? "") }
@@ -657,6 +661,28 @@ struct EposView: View {
     }
 
     private func selectOrder(_ o: EposOrder) async { await refreshOrder(o.id) }
+
+    // "Bill" tapped on a day-view card — open the booking's open order or create one.
+    private func handleBillBooking(_ b: Booking) async {
+        guard let staff = authVM.staff else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let studio = b.studio.isEmpty ? tillStudio : b.studio
+            openOrders = try await APIClient.shared.eposOpenOrders(studio: studio, staff: staff)
+            if let existing = openOrders.first(where: { $0.booking_id == b.id }) {
+                await refreshOrder(existing.id)
+            } else {
+                let tableId = (b.tableId ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.first
+                let o = try await APIClient.shared.eposCreateOrder(
+                    studio: studio, tableId: tableId, bookingId: b.id,
+                    customerName: b.name, label: nil, staff: staff)
+                await refreshOrder(o.id)
+            }
+            showTables = false
+        } catch { errorMsg = error.localizedDescription }
+        bookingsVM.pendingEposBooking = nil
+    }
 
     private func createOrder() async {
         guard let staff = authVM.staff else { return }

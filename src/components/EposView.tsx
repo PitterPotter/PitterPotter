@@ -16,11 +16,13 @@ interface Props {
   bookings: BookingInquiry[];            // today's + future bookings at this studio
   showToast: (msg: string, type?: 'success' | 'error') => void;
   onNavigateToFloorPlan?: () => void;
+  billBooking?: BookingInquiry | null;   // "Bill" pressed on a day-view card
+  onBillHandled?: () => void;
 }
 
 const fmt = (n: number) => `£${Number(n).toFixed(2)}`;
 
-export default function EposView({ staff, studio, bookings, showToast }: Props) {
+export default function EposView({ staff, studio, bookings, showToast, billBooking, onBillHandled }: Props) {
   const [categories, setCategories] = useState<EposCategory[]>([]);
   const [products, setProducts] = useState<EposProduct[]>([]);
   const [discounts, setDiscounts] = useState<EposDiscount[]>([]);
@@ -34,6 +36,7 @@ export default function EposView({ staff, studio, bookings, showToast }: Props) 
   const [items, setItems] = useState<EposOrderItem[]>([]);
   const [payments, setPayments] = useState<EposPayment[]>([]);
   const [busy, setBusy] = useState(false);
+  const [booted, setBooted] = useState(false);
 
   const [view, setView] = useState<'till' | 'tables'>('till');
   const [payModal, setPayModal] = useState<null | { method: EposPaymentMethod }>(null);
@@ -62,12 +65,13 @@ export default function EposView({ staff, studio, bookings, showToast }: Props) 
       const [t, o] = await Promise.all([eposListTables(staff, studio), eposOpenOrders(staff, studio)]);
       setTables(t.tables);
       setOpenOrders(o.orders);
+      setBooted(true);
     } catch (e) {
       showToast((e as Error).message, 'error');
     }
   }, [staff, studio, showToast]);
 
-  useEffect(() => { loadBootstrap(); }, [loadBootstrap]);
+  useEffect(() => { setBooted(false); loadBootstrap(); }, [loadBootstrap]);
 
   const refreshOrder = useCallback(async (orderId: string) => {
     const full = await eposGetOrder(staff, orderId);
@@ -79,6 +83,42 @@ export default function EposView({ staff, studio, bookings, showToast }: Props) 
   const selectOrder = async (o: EposOrder) => {
     try { await refreshOrder(o.id); } catch (e) { showToast((e as Error).message, 'error'); }
   };
+
+  // "Bill" pressed on a day-view card — open the booking's order (or create it).
+  useEffect(() => {
+    if (!billBooking || !booted) return;
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      try {
+        const o = await eposOpenOrders(staff, billBooking.studio || studio);
+        if (cancelled) return;
+        setOpenOrders(o.orders);
+        const existing = o.orders.find(ord => ord.booking_id === billBooking.id);
+        if (existing) {
+          await refreshOrder(existing.id);
+          setView('till');
+          showToast(`Opened ${existing.order_number} for ${billBooking.name}`, 'success');
+        } else {
+          const tableId = (billBooking.tableId || '').split(',').map(s => s.trim()).filter(Boolean)[0];
+          const res = await eposCreateOrder(staff, {
+            studio: billBooking.studio || studio,
+            tableId: tableId || undefined,
+            bookingId: billBooking.id,
+            customerName: billBooking.name,
+          });
+          if (cancelled) return;
+          await refreshOrder(res.order.id);
+          setView('till');
+          showToast(`Order ${res.order.order_number} opened for ${billBooking.name}`, 'success');
+        }
+      } catch (e) {
+        if (!cancelled) showToast((e as Error).message, 'error');
+      }
+      if (!cancelled) { setBusy(false); onBillHandled?.(); }
+    })();
+    return () => { cancelled = true; };
+  }, [billBooking, booted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = new Date().toISOString().split('T')[0];
   const todaysBookings = useMemo(

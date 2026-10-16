@@ -239,6 +239,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     onConfirm: () => void;
   }>({ isOpen: false, title: '', message: '', confirmLabel: 'Confirm', variant: 'danger', onConfirm: () => {} });
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [eposBillBooking, setEposBillBooking] = useState<BookingInquiry | null>(null);
 
   const showConfirmDialog = (opts: { title: string; message: string; confirmLabel?: string; variant?: 'danger' | 'warning'; onConfirm: () => void }) => {
     setConfirmDialog({ isOpen: true, confirmLabel: 'Confirm', variant: 'danger', ...opts });
@@ -3348,6 +3349,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           onAddWalkIn={() => setShowGhostModal(true)}
           onUploadPhoto={(booking, files) => { uploadPhotosToBooking(booking, files); }}
           onSetPaintedFlag={handleSetPaintedFlag}
+          onBill={(booking) => { setEposBillBooking(booking); setActiveTab('epos'); }}
           canUpdateStatus={canUpdateStatus}
           canAddWalkIn={canAddWalkIn}
         />
@@ -3848,6 +3850,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                   studio={tillStudio}
                   bookings={scopedInquiries}
                   showToast={showToast}
+                  billBooking={eposBillBooking}
+                  onBillHandled={() => setEposBillBooking(null)}
                   onNavigateToFloorPlan={() => setActiveTab('floor-plan')}
                 />
               );

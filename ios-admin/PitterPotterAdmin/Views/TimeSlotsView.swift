@@ -391,6 +391,9 @@ struct TimeSlotsData {
                     if let daySlots = newConfig["daySlots"] as? [String: [String]] {
                         config["daySlots"] = daySlots
                     }
+                    if let adultOnly = newConfig["adultOnlySlots"] as? [String: [String]] {
+                        config["adultOnlySlots"] = adultOnly
+                    }
                     if config["slots"] != nil {
                         studio[sessionKey] = config
                     }

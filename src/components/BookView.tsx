@@ -3,7 +3,7 @@ import { format, getDay, startOfDay, isBefore, addDays, subDays, isSameDay } fro
 import { Page, BookingInquiry } from '../types';
 import Calendar from './Calendar';
 import { getRemainingCapacity, getBusyDates, createPublicBooking } from '../lib/bookings';
-import { getSlots, getAvailableDays, isSessionEnabled, filterPastSlots, DayType } from '../lib/timeSlots';
+import { getSlots, getAvailableDays, isSessionEnabled, filterPastSlots, getAdultOnlySlots, DayType } from '../lib/timeSlots';
 import { loadClosuresFromSupabase, getClosureDates, ClosureDates, isDateInHolidayRange, getClosedDatesForStudio } from '../lib/closures';
 import { useToast } from './ToastContext';
 
@@ -177,6 +177,9 @@ export default function BookView({ setCurrentPage, adminMode = false }: BookView
   const minDate = useMemo(() => startOfDay(new Date()), []);
   const closedDatesAsDate = useMemo(() => getClosedDatesForStudio(closures.closedDates, studio).map(d => new Date(d + 'T00:00:00')), [closures.closedDates, studio]);
   const timeSlots = date ? getTimeSlots(date, closures, studio, sessionType) : [];
+  const adultOnlySlots = new Set(
+    date ? getAdultOnlySlots(SLOT_SESSION_KEY(sessionType), studio, getDay(date)) : []
+  );
 
   const availableSessionTypes = useMemo(() => SESSION_OPTIONS.filter(s => {
     if (!s.studios.includes(studio)) return false;
@@ -434,6 +437,7 @@ export default function BookView({ setCurrentPage, adminMode = false }: BookView
                       {timeSlots.map((slot) => {
                         const remaining = slotCapacity[slot] ?? MAX_CAPACITY;
                         const isFull = remaining === 0;
+                        const adultsOnly = adultOnlySlots.has(slot);
                         return (
                           <button key={slot} type="button"
                             onClick={() => !isFull && setTime(slot)}
@@ -441,10 +445,12 @@ export default function BookView({ setCurrentPage, adminMode = false }: BookView
                             className={`py-3 text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer rounded-lg ${
                               time === slot ? `bg-[#DBE7E4] hover:bg-[#D6E2E9] text-[#1B2D3C] border-[#1B2D3C]`
                               : isFull ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
+                              : adultsOnly ? 'bg-amber-50 text-[#1B2D3C] border-amber-300 hover:border-[#1B2D3C]'
                               : 'bg-white text-[#1B2D3C] border-[#1B2D3C]/20 hover:border-[#1B2D3C]'
                             }`}>
                             {slot}
                             {isFull && <span className="block text-[9px] font-normal normal-case tracking-normal mt-0.5">Full</span>}
+                            {!isFull && adultsOnly && <span className="block text-[9px] font-bold normal-case tracking-normal mt-0.5 text-amber-700">Adults only</span>}
                           </button>
                         );
                       })}

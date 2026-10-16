@@ -143,16 +143,19 @@ VALUES
   ('Putney','T10','PARTY','LARGE_RECTANGLE',1,8,false,'T10',10,true)
 ON CONFLICT (studio, table_id) DO NOTHING;
 
--- Till categories.
+-- Till categories (matching the existing register layout).
 INSERT INTO epos_categories (name, slug, color, sort_order) VALUES
-  ('Pottery','pottery','#D97706',1),
-  ('Studio Fees','studio-fees','#1B2D3C',2),
-  ('Drinks','drinks','#0D9488',3),
-  ('Snacks','snacks','#65A30D',4),
-  ('Gift Vouchers','gift-vouchers','#DB2777',5),
-  ('Baby Prints','baby-prints','#7C3AED',6),
-  ('Parties','parties','#EA580C',7),
-  ('Other','other','#64748B',8)
+  ('Studio/Writing Fees','studio-fees','#D97706',1),
+  ('Mugs','mugs','#1E3A8A',2),
+  ('Small Animals','small-animals','#7C3AED',3),
+  ('Plates/Bowls/Kitchen','plates-bowls-kitchen','#64748B',4),
+  ('Moneybanks','moneybanks','#DC2626',5),
+  ('Vases/Jugs/Boxes','vases-jugs-boxes','#65A30D',6),
+  ('Tiles and Ornaments','tiles-and-ornaments','#9333EA',7),
+  ('Drinks','drinks','#C2410C',8),
+  ('Christmas','christmas','#4B5563',9),
+  ('Party','parties','#16A34A',10),
+  ('Rush Service','rush-service','#A16207',11)
 ON CONFLICT (slug) DO NOTHING;
 
 -- RLS: service-role only, matching studio_tables convention.

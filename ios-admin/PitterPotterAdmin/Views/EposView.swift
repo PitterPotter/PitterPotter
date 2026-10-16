@@ -32,6 +32,8 @@ struct EposView: View {
     @State private var newLabel = ""
     @State private var newCustomer = ""
     @State private var newBookingId = ""
+    @State private var orderSearch = ""
+    @FocusState private var findFocused: Bool
     @State private var showDiscount = false
     @State private var showCustom = false
     @State private var customName = ""
@@ -259,26 +261,60 @@ struct EposView: View {
         VStack(spacing: 0) {
             // Order selector
             VStack(spacing: 6) {
-                HStack(spacing: 8) {
-                    Menu {
-                        ForEach(openOrders) { o in
-                            Button("\(o.order_number)\(o.table_id.map { " · \($0)" } ?? "")\(o.label.map { " · \($0)" } ?? "") · \(money(o.total))") {
-                                Task { await selectOrder(o) }
-                            }
-                        }
-                    } label: {
-                        Text(order.map { "\($0.order_number)\($0.table_id.map { " · \($0)" } ?? "")" } ?? "Select open order…")
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        TextField("Find bill — name, table or order #…", text: $orderSearch)
                             .font(AppFont.body(13, weight: .bold)).foregroundStyle(PPBrand.charcoal)
-                            .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
                             .padding(9).background(Color.white)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(PPBrand.charcoal.opacity(0.2), lineWidth: 1))
+                            .focused($findFocused)
+                        Button { newOrderTable = nil; showNewOrder = true } label: {
+                            Image(systemName: "plus").font(AppFont.body(14, weight: .bold)).foregroundStyle(.white)
+                                .padding(9).background(PPBrand.charcoal).clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    Button { newOrderTable = nil; showNewOrder = true } label: {
-                        Image(systemName: "plus").font(AppFont.body(14, weight: .bold)).foregroundStyle(.white)
-                            .padding(9).background(PPBrand.charcoal).clipShape(RoundedRectangle(cornerRadius: 8))
+                    if findFocused || !orderSearch.isEmpty {
+                        let q = orderSearch.trimmingCharacters(in: .whitespaces).lowercased()
+                        let matches = openOrders.filter {
+                            q.isEmpty ||
+                            $0.order_number.lowercased().contains(q) ||
+                            ($0.customer_name ?? "").lowercased().contains(q) ||
+                            ($0.label ?? "").lowercased().contains(q) ||
+                            ($0.table_id ?? "").lowercased().contains(q)
+                        }
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                if matches.isEmpty {
+                                    Text("No open bills match")
+                                        .font(AppFont.body(11, weight: .medium)).foregroundStyle(PPBrand.charcoal.opacity(0.4))
+                                        .padding(10)
+                                }
+                                ForEach(matches) { o in
+                                Button {
+                                    orderSearch = ""; findFocused = false
+                                    Task { await selectOrder(o) }
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(o.customer_name ?? o.label ?? o.order_number)
+                                            .font(AppFont.body(13, weight: .bold)).foregroundStyle(PPBrand.charcoal).lineLimit(1)
+                                        Text("\(o.order_number)\(o.table_id.map { " · \($0)" } ?? "")\(o.label != nil && o.customer_name != nil ? " · \(o.label!)" : "") · \(money(o.total))")
+                                            .font(AppFont.body(9, weight: .medium)).foregroundStyle(PPBrand.charcoal.opacity(0.5))
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 10).padding(.vertical, 8)
+                                }
+                                .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 240)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(PPBrand.charcoal.opacity(0.15), lineWidth: 1))
+                        .padding(.top, 4)
                     }
-                    .buttonStyle(.plain)
                 }
                 if let o = order {
                     HStack(spacing: 4) {

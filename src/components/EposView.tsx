@@ -49,6 +49,8 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
   const [customModal, setCustomModal] = useState(false);
   const [customItem, setCustomItem] = useState({ name: '', price: '', vat: 'standard' });
   const [newOrderModal, setNewOrderModal] = useState<null | { tableId?: string }>(null);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [findOpen, setFindOpen] = useState(false);
   const [newOrder, setNewOrder] = useState({ label: '', customerName: '', bookingId: '' });
   const [refundTarget, setRefundTarget] = useState<EposPayment | null>(null);
 
@@ -313,18 +315,46 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
       <div className="w-[380px] shrink-0 bg-white rounded-2xl border-2 border-[#1B2D3C]/10 flex flex-col overflow-hidden">
         <div className="p-3 border-b-2 border-[#1B2D3C]/10 bg-[#F5F2E8]">
           <div className="flex gap-2 items-center">
-            <select
-              value={order?.id || ''}
-              onChange={e => { const o = openOrders.find(x => x.id === e.target.value); if (o) selectOrder(o); }}
-              className="flex-1 px-3 py-2 rounded-lg border border-[#1B2D3C]/20 text-sm font-bold text-[#1B2D3C] bg-white"
-            >
-              <option value="">{order ? `${order.order_number}${order.table_id ? ` · ${order.table_id}` : ''}` : 'Select open order…'}</option>
-              {openOrders.filter(o => o.id !== order?.id).map(o => (
-                <option key={o.id} value={o.id}>
-                  {o.order_number}{o.table_id ? ` · ${o.table_id}` : ''}{o.label ? ` · ${o.label}` : ''} · {fmt(o.total)}
-                </option>
-              ))}
-            </select>
+            <div className="relative flex-1">
+              <input
+                value={orderSearch}
+                onFocus={() => setFindOpen(true)}
+                onBlur={() => setTimeout(() => setFindOpen(false), 150)}
+                onChange={e => { setOrderSearch(e.target.value); setFindOpen(true); }}
+                placeholder="Find bill — name, table or order #…"
+                className="w-full px-3 py-2 rounded-lg border border-[#1B2D3C]/20 text-sm font-bold text-[#1B2D3C] bg-white"
+              />
+              {findOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white border border-[#1B2D3C]/15 rounded-xl shadow-lg max-h-72 overflow-y-auto">
+                  {(() => {
+                    const q = orderSearch.trim().toLowerCase();
+                    const matches = openOrders.filter(o =>
+                      !q ||
+                      o.order_number.toLowerCase().includes(q) ||
+                      (o.customer_name || '').toLowerCase().includes(q) ||
+                      (o.label || '').toLowerCase().includes(q) ||
+                      (o.table_id || '').toLowerCase().includes(q));
+                    if (matches.length === 0) {
+                      return <div className="px-3 py-3 text-xs font-semibold text-[#1B2D3C]/40">No open bills match</div>;
+                    }
+                    return matches.map(o => (
+                      <button
+                        key={o.id}
+                        onMouseDown={e => { e.preventDefault(); setOrderSearch(''); setFindOpen(false); selectOrder(o); setView('till'); }}
+                        className="w-full text-left px-3 py-2.5 hover:bg-[#F5F2E8] border-b border-[#1B2D3C]/5 last:border-0 cursor-pointer"
+                      >
+                        <div className="text-sm font-black text-[#1B2D3C] truncate">
+                          {o.customer_name || o.label || o.order_number}
+                        </div>
+                        <div className="text-[10px] font-semibold text-[#1B2D3C]/50">
+                          {o.order_number}{o.table_id ? ` · ${o.table_id}` : ''}{o.label && o.customer_name ? ` · ${o.label}` : ''} · {fmt(o.total)}
+                        </div>
+                      </button>
+                    ));
+                  })()}
+                </div>
+              )}
+            </div>
             <button onClick={() => { setNewOrderModal({}); setNewOrder({ label: '', customerName: '', bookingId: '' }); }}
               className="px-3 py-2 rounded-lg bg-[#1B2D3C] text-white text-xs font-bold cursor-pointer">+</button>
           </div>

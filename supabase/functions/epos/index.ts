@@ -8,7 +8,7 @@ import {
   computeTotals, toPence, toPounds, vatRateFor, isVatTreatment,
   formatOrderNumber, type VatTreatment,
 } from '../_shared/eposMoney.ts';
-import { createCardPayment, checkDojoPaymentStatus, cardProvider } from '../_shared/eposPayments.ts';
+import { createCardPayment, checkDojoPaymentStatus, createDojoRefund, cardProvider } from '../_shared/eposPayments.ts';
 import type { AdminSupabaseClient, StaffRecord } from '../_shared/types.ts';
 
 const STUDIO_DETAILS: Record<string, { address: string; phone: string }> = {
@@ -446,7 +446,7 @@ Deno.serve(async (req) => {
         reference = res.code;
       } else if (method === 'card') {
         if (amountPence > outstandingPence) return err('Amount exceeds outstanding balance', corsHeaders);
-        const result = await createCardPayment(amountPence, ord.order_number);
+        const result = await createCardPayment(amountPence, ord.order_number, ord.studio);
         if (result.status === 'failed') return err(result.detail || 'Card payment failed', corsHeaders, 402);
         provider = result.provider;
         reference = result.reference;
@@ -530,6 +530,19 @@ Deno.serve(async (req) => {
       const refundablePence = toPence(Number(p.amount) - Number(p.refunded_amount));
       const refundPence = isNumber(amount) && amount > 0 ? Math.min(toPence(amount), refundablePence) : refundablePence;
       if (refundPence <= 0) return err('Nothing left to refund', corsHeaders);
+
+      // Dojo card refunds go back onto the terminal as a matched refund
+      // (card present). The full amount is refunded — Dojo matched refunds
+      // don't take a partial amount; for partial card refunds staff should
+      // use cash/other instead.
+      if (p.method === 'card' && p.provider === 'dojo') {
+        if (refundPence !== toPence(Number(p.amount))) return err('Dojo terminal refunds are full-amount only', corsHeaders);
+        const intentId = String(p.reference || '').split('|')[0];
+        if (!intentId) return err('No Dojo payment intent on this payment', corsHeaders);
+        const { data: ord } = await supabase.from('epos_orders').select('studio').eq('id', p.order_id).single();
+        const res = await createDojoRefund(intentId, ord?.studio);
+        if (res.status === 'failed') return err(res.detail || 'Dojo refund failed', corsHeaders, 502);
+      }
 
       // Voucher refunds restore card balance.
       if (p.method === 'voucher' && p.gift_card_id) {
@@ -660,12 +673,14 @@ Deno.serve(async (req) => {
     if (action === 'saveDiscount') {
       if (!canManageProducts(staff)) return err('Forbidden', corsHeaders, 403);
       const { discount } = body;
-      if (!isObject(discount) || !isNonEmptyString(discount.name) ||
-          !['percent', 'fixed'].includes(discount.kind) || !isNumber(discount.value) || discount.value <= 0) {
+      if (!isObject(discount)) return err('Invalid discount', corsHeaders);
+      const kind = String(discount.kind ?? '');
+      if (!isNonEmptyString(discount.name) ||
+          !['percent', 'fixed'].includes(kind) || !isNumber(discount.value) || discount.value <= 0) {
         return err('Invalid discount', corsHeaders);
       }
       const row = {
-        name: discount.name.slice(0, 60), kind: discount.kind, value: discount.value,
+        name: discount.name.slice(0, 60), kind, value: discount.value,
         active: isBoolean(discount.active) ? discount.active : true,
         sort_order: isNumber(discount.sortOrder) ? Math.floor(discount.sortOrder) : 0,
       };

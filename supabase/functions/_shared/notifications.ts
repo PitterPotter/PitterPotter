@@ -9,6 +9,7 @@ export type NotificationType =
   | 'gift_card_purchased'
   | 'gift_card_redeemed'
   | 'collection_ready'
+  | 'epos_refund'
   | 'staff_action';
 
 export async function createNotification(

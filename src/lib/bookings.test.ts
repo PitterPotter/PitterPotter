@@ -94,6 +94,10 @@ describe('toBookingRow', () => {
       photos: null,
       collection_status: null,
       collected_at: null,
+      deposit_paid_at: null,
+      final_paid_at: null,
+      ready_at: null,
+      painted_flag: null,
     });
   });
 });

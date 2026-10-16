@@ -1,5 +1,28 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { computeCapacity, capacityWarning } from './capacity';
+import { planAllocation, largestAvailablePartyCapacity } from './allocation.ts';
+
+// The Wimbledon path delegates to the resource-allocation engine, which needs
+// real studio_tables/table_configurations/booking_resources rows. Mock the
+// engine boundary so these tests exercise computeCapacity, not the planner.
+vi.mock('./allocation.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./allocation.ts')>();
+  return {
+    ...actual,
+    loadStudioConfigFromDb: vi.fn(async () => ({
+      tables: [],
+      configurations: [],
+      partySetupBufferMinutes: 0,
+      partyCleanupBufferMinutes: 0,
+      normalSessionMinutes: 120,
+    })),
+    planAllocation: vi.fn(async () => ({
+      result: { success: true, configuration: null, blockedStart: null, blockedEnd: null, resources: [] },
+      moves: [],
+    })),
+    largestAvailablePartyCapacity: vi.fn(async () => ({ available: 32, total: 32 })),
+  };
+});
 
 interface Row {
   painters_count?: number;
@@ -17,6 +40,11 @@ function mockSupabase(bookings: Row[], capacity: { session_type: string; max_pai
         select: chain,
         eq: chain,
         in: chain,
+        neq: chain,
+        not: chain,
+        is: chain,
+        order: chain,
+        limit: chain,
         then: (resolve: (value: { data: unknown; error: null }) => unknown) =>
           resolve({ data: table === 'bookings' ? bookings : capacity, error: null }),
       });
@@ -60,6 +88,7 @@ describe('computeCapacity - party bookings', () => {
   });
 
   it('allows a second concurrent party at Wimbledon', async () => {
+    vi.mocked(largestAvailablePartyCapacity).mockResolvedValueOnce({ available: 19, total: 32 });
     const supabase = mockSupabase(
       [{ session_type: 'birthday-party', painters_count: 13, time: '10:15-12:15' }],
       WIMBLEDON_CAPACITY,
@@ -85,6 +114,11 @@ describe('computeCapacity - party bookings', () => {
   });
 
   it('leaves no party seats when concurrent parties fill the capacity', async () => {
+    vi.mocked(planAllocation).mockResolvedValueOnce({
+      result: { success: false, configuration: null, blockedStart: null, blockedEnd: null, resources: [], reason: 'no party configuration available' },
+      moves: [],
+    });
+    vi.mocked(largestAvailablePartyCapacity).mockResolvedValueOnce({ available: 0, total: 32 });
     const supabase = mockSupabase(
       [{ session_type: 'birthday-party', painters_count: 32, time: '10:15-12:15' }],
       WIMBLEDON_CAPACITY,

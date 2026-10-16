@@ -46,7 +46,8 @@ jobs:
 
       - name: Type-check shared modules
         working-directory: supabase/functions/_shared
-        run: deno check *.ts
+        # *.test.ts files are vitest tests, not Deno code — exclude them.
+        run: deno check $(ls *.ts | grep -v '\.test\.ts$')
 
       - name: Type-check edge functions
         run: |

@@ -189,8 +189,15 @@ struct EposView: View {
             (activeCategory == nil || $0.category_id == activeCategory) &&
             (q.isEmpty || $0.name.lowercased().contains(q) || ($0.sku ?? "").lowercased().contains(q))
         }
+        // Product grid stays collapsed until staff search or pick a category —
+        // keeps the till compact so payment buttons are never off-screen.
+        let showGrid = !q.isEmpty || activeCategory != nil
         return ScrollView {
-            if filtered.isEmpty {
+            if !showGrid {
+                Text("Search above or tap a category to show products")
+                    .font(AppFont.body(13, weight: .medium)).foregroundStyle(PPBrand.charcoal.opacity(0.4))
+                    .padding(.top, 80)
+            } else if filtered.isEmpty {
                 Text(products.isEmpty ? "No products yet — add them under Admin → EPOS Products (web) or Manage below." : "No matching products")
                     .font(AppFont.body(13)).foregroundStyle(PPBrand.charcoal.opacity(0.5)).padding(.top, 60)
             }
@@ -429,6 +436,18 @@ struct EposView: View {
                             payButton("OTHER", "ellipsis.circle", Color(hex: 0x64748B), "other")
                         }
                         .disabled(outstanding <= 0)
+                        // Park the bill — items are saved server-side as they're
+                        // added, so this just returns it to open bills while the
+                        // customer keeps painting. Find it again via Find Bill.
+                        Button {
+                            order = nil; items = []; payments = []; orderSearch = ""
+                        } label: {
+                            Text("SAVE ORDER").font(AppFont.heading(11)).foregroundStyle(Color(hex: 0x047857))
+                                .frame(maxWidth: .infinity).padding(.vertical, 11)
+                                .background(Color(hex: 0xECFDF5))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: 0x059669).opacity(0.3), lineWidth: 1.5))
+                        }.buttonStyle(.plain)
                         Button("Void order") {
                             Task {
                                 do {

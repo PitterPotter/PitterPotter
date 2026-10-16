@@ -299,14 +299,28 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
                 + Custom
               </button>
             </div>
-            <div className="grid grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto">
-              {filteredProducts.map(productTile)}
-              {filteredProducts.length === 0 && (
-                <div className="col-span-full text-center text-[#1B2D3C]/50 py-12 text-sm">
-                  {products.length === 0 ? 'No products yet — add them under Admin → EPOS Products' : 'No matching products'}
+            {/* Product grid stays collapsed until staff search or pick a category —
+                keeps the till compact so payment buttons are never off-screen. */}
+            {(() => {
+              const showGrid = search.trim() !== '' || activeCategory !== 'all';
+              if (!showGrid) {
+                return (
+                  <div className="text-center text-[#1B2D3C]/40 py-16 text-sm font-semibold">
+                    Search above or tap a category to show products
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto">
+                  {filteredProducts.map(productTile)}
+                  {filteredProducts.length === 0 && (
+                    <div className="col-span-full text-center text-[#1B2D3C]/50 py-12 text-sm">
+                      {products.length === 0 ? 'No products yet — add them under Admin → EPOS Products' : 'No matching products'}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
           </>
         )}
       </div>
@@ -459,6 +473,13 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
                       {m === 'card' ? (cardProvider === 'dojo' ? 'Card (Dojo)' : 'Card') : m === 'voucher' ? 'Voucher' : m === 'other' ? 'Other' : 'Cash'}
                     </button>
                   ))}
+                  {/* Park the bill — items are saved on the server as they're added,
+                      so "Save" just puts it back into open bills (retrievable via
+                      Find Bill or the table card) while the customer keeps painting. */}
+                  <button onClick={() => { setOrder(null); setItems([]); setPayments([]); setOrderSearch(''); showToast(`Order ${order.order_number} saved — find it by name at checkout`, 'success'); }}
+                    className="col-span-2 py-2.5 rounded-lg bg-emerald-50 border-2 border-emerald-500/30 text-emerald-700 text-xs font-black uppercase tracking-wider cursor-pointer">
+                    Save Order
+                  </button>
                   <button onClick={() => { if (confirm('Void this order? (only possible while unpaid)')) eposVoidOrder(staff, order.id, 'voided from till').then(() => { setOrder(null); setItems([]); setPayments([]); loadBootstrap(); }).catch(e => showToast((e as Error).message, 'error')); }}
                     className="col-span-2 py-1.5 rounded-lg text-red-500 text-[10px] font-bold uppercase cursor-pointer">Void order</button>
                 </>

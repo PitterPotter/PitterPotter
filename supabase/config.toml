@@ -237,3 +237,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/admin-notifications/deno.json"
 entrypoint = "./functions/admin-notifications/index.ts"
+
+[functions.epos]
+enabled = true
+verify_jwt = true
+import_map = "./functions/epos/deno.json"
+entrypoint = "./functions/epos/index.ts"

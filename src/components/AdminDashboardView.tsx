@@ -4,6 +4,9 @@ import ConfirmDialog from './ConfirmDialog';
 import FloorPlanView from './FloorPlanView';
 import WimbledonFloorPlan from './WimbledonFloorPlan';
 import PutneyFloorPlan from './PutneyFloorPlan';
+import EposView from './EposView';
+import EposProductsTab from './admin/EposProductsTab';
+import EposReportsTab from './admin/EposReportsTab';
 import { allocateResources as allocateResourcesFromBookings, formatResources, isPartySessionType } from '../lib/allocation';
 import { findAvailablePutneyTable, findMultiplePutneyTables } from './PutneyFloorPlan';
 import { Calendar, Clock, Users, Mail, Phone, LogOut, Trash2, CheckCircle, XCircle, Plus, Copy, Inbox, Gift, ChevronUp, ChevronDown, X as XIcon, Pencil, Lock, Camera, ScanLine, AlertCircle, Package, Check, Wine, Loader2, MapPin, Ban } from 'lucide-react';
@@ -87,7 +90,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [inquiries, setInquiries] = useState<BookingInquiry[]>([]);
   const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'gift-cards' | 'floor-plan' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation'>(staff.role === 'super_admin' ? 'dashboard' : 'bookings');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'gift-cards' | 'floor-plan' | 'epos' | 'epos-products' | 'epos-sales' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation'>(staff.role === 'super_admin' ? 'dashboard' : 'bookings');
   const [floorPlanStudio, setFloorPlanStudio] = useState<'Putney' | 'Wimbledon'>(staff.allowedStudios?.[0] === 'Putney' ? 'Putney' : 'Wimbledon');
   const [floorPlanDate, setFloorPlanDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
@@ -1478,6 +1481,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           canEditBookings: row.can_edit_bookings,
           canAddWalkIns: row.can_add_walk_ins,
           canDeleteBookings: row.can_delete_bookings,
+          canEposRefunds: !!row.can_epos_refunds,
+          canEposDiscounts: !!row.can_epos_discounts,
+          canEposManageProducts: !!row.can_epos_manage_products,
           allowedStudios: row.allowed_studios && row.allowed_studios.length > 0 ? row.allowed_studios : undefined,
           createdAt: row.created_at,
         }));
@@ -1736,6 +1742,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const canDelete = isSuperAdmin || staff.canDeleteBookings;
   const canAddWalkIn = isSuperAdmin || staff.canAddWalkIns;
   const canManageStaff = isSuperAdmin;
+  const canEposProducts = isSuperAdmin || !!staff.canEposManageProducts;
+  const canEposReports = isSuperAdmin || !!staff.canEposRefunds || !!staff.canEposDiscounts;
 
   const canManageBooking = (booking: BookingInquiry) => {
     if (isSuperAdmin) return true;
@@ -2332,6 +2340,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     canEditBookings: false,
     canAddWalkIns: false,
     canDeleteBookings: false,
+    canEposRefunds: false,
+    canEposDiscounts: false,
+    canEposManageProducts: false,
     allowedStudios: [] as ('Putney' | 'Wimbledon')[],
   });
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -2364,6 +2375,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       canEditBookings: staffMember.canEditBookings,
       canAddWalkIns: staffMember.canAddWalkIns,
       canDeleteBookings: staffMember.canDeleteBookings,
+      canEposRefunds: staffMember.canEposRefunds || false,
+      canEposDiscounts: staffMember.canEposDiscounts || false,
+      canEposManageProducts: staffMember.canEposManageProducts || false,
       allowedStudios: staffMember.allowedStudios || [],
     });
     setShowStaffModal(true);
@@ -2410,6 +2424,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               canEditBookings: newStaff.canEditBookings,
               canAddWalkIns: newStaff.canAddWalkIns,
               canDeleteBookings: newStaff.canDeleteBookings,
+              canEposRefunds: newStaff.canEposRefunds,
+              canEposDiscounts: newStaff.canEposDiscounts,
+              canEposManageProducts: newStaff.canEposManageProducts,
               allowedStudios: newStaff.role === 'super_admin' ? null : (newStaff.allowedStudios.length > 0 ? newStaff.allowedStudios : null),
             },
           }),
@@ -2437,6 +2454,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       canEditBookings: false,
       canAddWalkIns: false,
       canDeleteBookings: false,
+      canEposRefunds: false,
+      canEposDiscounts: false,
+      canEposManageProducts: false,
       allowedStudios: [],
     });
     setEditingStaff(null);
@@ -2981,11 +3001,13 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             )}
 
             {/* Admin dropdown */}
-            {canManageStaff && (
+            {(canManageStaff || canEposProducts || canEposReports) && (
               <AdminDropdown
                 activeTab={activeTab}
                 setActiveTab={(t) => setActiveTab(t as typeof activeTab)}
                 isSuperAdmin={isSuperAdmin}
+                canEposProducts={canEposProducts}
+                canEposReports={canEposReports}
               />
             )}
           </div>
@@ -2993,6 +3015,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           {/* Row 2 — tools */}
           <div className="flex items-center gap-1 scrollbar-hide border-t border-[#1B2D3C]/5">
             {[
+              { value: 'epos', label: 'Till', badge: null },
               { value: 'gift-cards', label: 'Gift Vouchers', badge: null },
               { value: 'floor-plan', label: 'Floor Plan', badge: null },
             ].map((tab) => (
@@ -3812,6 +3835,32 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               )}
             </div>
           </div>
+        )}
+
+        {activeTab === 'epos' && (
+          <div className="space-y-4">
+            {(() => {
+              const tillStudio: 'Putney' | 'Wimbledon' =
+                studioFilter !== 'all' ? studioFilter : (visibleStudios[0] || 'Putney');
+              return (
+                <EposView
+                  staff={staff}
+                  studio={tillStudio}
+                  bookings={scopedInquiries}
+                  showToast={showToast}
+                  onNavigateToFloorPlan={() => setActiveTab('floor-plan')}
+                />
+              );
+            })()}
+          </div>
+        )}
+
+        {activeTab === 'epos-products' && canEposProducts && (
+          <EposProductsTab staff={staff} showToast={showToast} />
+        )}
+
+        {activeTab === 'epos-sales' && canEposReports && (
+          <EposReportsTab staff={staff} showToast={showToast} />
         )}
 
         {/* Settings tab — Staff + Capacity + Stripe + Page Visibility + Table Plan */}
@@ -4826,9 +4875,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                     <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider">Permission Presets</label>
                     <div className="flex gap-2 flex-wrap">
                       {[
-                        { label: 'Manager', permissions: { canUpdateStatus: true, canEditBookings: true, canAddWalkIns: true, canDeleteBookings: true } },
-                        { label: 'Front Desk', permissions: { canUpdateStatus: true, canEditBookings: false, canAddWalkIns: true, canDeleteBookings: false } },
-                        { label: 'Studio Assistant', permissions: { canUpdateStatus: false, canEditBookings: false, canAddWalkIns: true, canDeleteBookings: false } },
+                        { label: 'Manager', permissions: { canUpdateStatus: true, canEditBookings: true, canAddWalkIns: true, canDeleteBookings: true, canEposRefunds: true, canEposDiscounts: true, canEposManageProducts: false } },
+                        { label: 'Front Desk', permissions: { canUpdateStatus: true, canEditBookings: false, canAddWalkIns: true, canDeleteBookings: false, canEposRefunds: false, canEposDiscounts: true, canEposManageProducts: false } },
+                        { label: 'Studio Assistant', permissions: { canUpdateStatus: false, canEditBookings: false, canAddWalkIns: true, canDeleteBookings: false, canEposRefunds: false, canEposDiscounts: false, canEposManageProducts: false } },
                       ].map(preset => (
                         <button
                           key={preset.label}
@@ -4878,6 +4927,34 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                       className="w-4 h-4 accent-[#1B2D3C]"
                     />
                     Delete bookings
+                  </label>
+                  <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider pt-2">EPOS / Till</label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[#1B2D3C] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newStaff.canEposDiscounts}
+                      onChange={(e) => setNewStaff({ ...newStaff, canEposDiscounts: e.target.checked })}
+                      className="w-4 h-4 accent-[#1B2D3C]"
+                    />
+                    Apply EPOS discounts
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[#1B2D3C] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newStaff.canEposRefunds}
+                      onChange={(e) => setNewStaff({ ...newStaff, canEposRefunds: e.target.checked })}
+                      className="w-4 h-4 accent-[#1B2D3C]"
+                    />
+                    Process EPOS refunds
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[#1B2D3C] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newStaff.canEposManageProducts}
+                      onChange={(e) => setNewStaff({ ...newStaff, canEposManageProducts: e.target.checked })}
+                      className="w-4 h-4 accent-[#1B2D3C]"
+                    />
+                    Manage EPOS products
                   </label>
                   </div>
                 </div>
@@ -6799,7 +6876,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
 // --- Grouped Navigation Dropdowns ---
 
-type TabValue = 'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'gift-cards' | 'floor-plan' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation';
+type TabValue = 'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'gift-cards' | 'floor-plan' | 'epos' | 'epos-products' | 'epos-sales' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation';
 
 function NavTab({
   label,
@@ -6914,16 +6991,24 @@ function AdminDropdown({
   activeTab,
   setActiveTab,
   isSuperAdmin,
+  canEposProducts,
+  canEposReports,
 }: {
   activeTab: TabValue;
   setActiveTab: (t: TabValue) => void;
   isSuperAdmin: boolean;
+  canEposProducts?: boolean;
+  canEposReports?: boolean;
 }) {
   const items: { value: TabValue; label: string }[] = [
-    { value: 'analytics', label: 'Analytics' },
-    { value: 'settings', label: 'Settings' },
-    { value: 'documentation', label: 'Documentation' },
-    ...(isSuperAdmin ? [{ value: 'webmaster' as TabValue, label: 'Webmaster' }] : []),
+    ...(isSuperAdmin || canEposProducts ? [{ value: 'epos-products' as TabValue, label: 'EPOS Products' }] : []),
+    ...(isSuperAdmin || canEposReports ? [{ value: 'epos-sales' as TabValue, label: 'EPOS Sales' }] : []),
+    ...(isSuperAdmin ? [
+      { value: 'analytics' as TabValue, label: 'Analytics' },
+      { value: 'settings' as TabValue, label: 'Settings' },
+      { value: 'documentation' as TabValue, label: 'Documentation' },
+      { value: 'webmaster' as TabValue, label: 'Webmaster' },
+    ] : []),
   ];
   return <NavDropdown label="Admin" items={items} activeTab={activeTab} setActiveTab={setActiveTab} />;
 }

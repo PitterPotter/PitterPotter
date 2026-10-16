@@ -46,6 +46,9 @@ export default function AdminLoginView({ onLogin }: AdminLoginProps) {
         canEditBookings: !!data.canEditBookings,
         canAddWalkIns: !!data.canAddWalkIns,
         canDeleteBookings: !!data.canDeleteBookings,
+        canEposRefunds: !!data.canEposRefunds,
+        canEposDiscounts: !!data.canEposDiscounts,
+        canEposManageProducts: !!data.canEposManageProducts,
         allowedStudios: Array.isArray(data.allowedStudios) && data.allowedStudios.length > 0
           ? data.allowedStudios as ('Putney' | 'Wimbledon')[]
           : undefined,

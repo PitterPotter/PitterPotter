@@ -93,6 +93,9 @@ export interface Staff {
   canEditBookings: boolean;
   canAddWalkIns: boolean;
   canDeleteBookings: boolean;
+  canEposRefunds?: boolean;
+  canEposDiscounts?: boolean;
+  canEposManageProducts?: boolean;
   allowedStudios?: ('Putney' | 'Wimbledon')[];
   sessionToken?: string;
   sessionExpiresAt?: string;
@@ -136,6 +139,9 @@ export interface StaffApiRow {
   can_edit_bookings: boolean;
   can_add_walk_ins: boolean;
   can_delete_bookings: boolean;
+  can_epos_refunds?: boolean;
+  can_epos_discounts?: boolean;
+  can_epos_manage_products?: boolean;
   allowed_studios?: ('Putney' | 'Wimbledon')[];
   created_at: string;
 }
@@ -149,7 +155,101 @@ export type NotificationType =
   | 'gift_card_purchased'
   | 'gift_card_redeemed'
   | 'collection_ready'
-  | 'staff_action';
+  | 'staff_action'
+  | 'epos_refund';
+
+// ---------- EPOS ----------
+export type EposStudio = 'Putney' | 'Wimbledon';
+export type EposVatTreatment = 'standard' | 'reduced' | 'zero' | 'exempt';
+export type EposPaymentMethod = 'cash' | 'card' | 'voucher' | 'other';
+export type EposOrderStatus = 'open' | 'partial' | 'paid' | 'void';
+
+export interface EposCategory {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  sort_order: number;
+  active: boolean;
+}
+
+export interface EposProduct {
+  id: string;
+  category_id: string | null;
+  name: string;
+  sku: string | null;
+  price: number;
+  vat_treatment: EposVatTreatment;
+  vat_rate: number;
+  image_url: string | null;
+  studios: EposStudio[];
+  active: boolean;
+  sort_order: number;
+}
+
+export interface EposDiscount {
+  id: string;
+  name: string;
+  kind: 'percent' | 'fixed';
+  value: number;
+  active: boolean;
+  sort_order: number;
+}
+
+export interface EposOrderItem {
+  id: string;
+  order_id: string;
+  product_id: string | null;
+  name: string;
+  unit_price: number;
+  quantity: number;
+  vat_treatment: EposVatTreatment;
+  vat_rate: number;
+  line_total: number;
+}
+
+export interface EposPayment {
+  id: string;
+  order_id: string;
+  method: EposPaymentMethod;
+  provider: string;
+  amount: number;
+  status: 'completed' | 'pending' | 'failed' | 'partially_refunded' | 'refunded';
+  reference: string | null;
+  gift_card_id: string | null;
+  change_given: number | null;
+  refunded_amount: number;
+  staff_name: string | null;
+  created_at: string;
+}
+
+export interface EposOrder {
+  id: string;
+  order_number: string;
+  studio: EposStudio;
+  table_id: string | null;
+  booking_id: string | null;
+  customer_name: string | null;
+  label: string | null;
+  staff_name: string | null;
+  status: EposOrderStatus;
+  subtotal: number;
+  discount_total: number;
+  vat_total: number;
+  total: number;
+  paid_total: number;
+  discount_label: string | null;
+  notes: string | null;
+  created_at: string;
+  closed_at: string | null;
+}
+
+export interface EposTable {
+  table_id: string;
+  label: string;
+  area: string;
+  max_capacity: number;
+}
 
 export interface AppNotification {
   id: string;

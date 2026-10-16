@@ -118,6 +118,9 @@ Deno.serve(async (req) => {
       canEditBookings: staff.can_edit_bookings,
       canAddWalkIns: staff.can_add_walk_ins,
       canDeleteBookings: staff.can_delete_bookings,
+      canEposRefunds: staff.can_epos_refunds,
+      canEposDiscounts: staff.can_epos_discounts,
+      canEposManageProducts: staff.can_epos_manage_products,
       allowedStudios: staff.allowed_studios ?? null,
       sessionToken: token,
     }), {

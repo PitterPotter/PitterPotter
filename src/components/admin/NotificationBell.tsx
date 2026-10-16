@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, X, CheckCheck, Calendar, Users, Gift, Camera, UserCog, AlertCircle } from 'lucide-react';
+import { Bell, X, CheckCheck, Calendar, Users, Gift, Camera, UserCog, AlertCircle, Receipt } from 'lucide-react';
 import { AppNotification, NotificationType, Staff } from '../../types';
 import { supabase, isSupabaseEnabled } from '../../lib/supabase';
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from '../../lib/notifications';
@@ -20,6 +20,7 @@ const NOTIFICATION_ICONS: Record<NotificationType, typeof Bell> = {
   gift_card_redeemed: Gift,
   collection_ready: Camera,
   staff_action: UserCog,
+  epos_refund: Receipt,
 };
 
 const NOTIFICATION_COLORS: Record<NotificationType, string> = {
@@ -32,6 +33,7 @@ const NOTIFICATION_COLORS: Record<NotificationType, string> = {
   gift_card_redeemed: 'text-amber-600 bg-amber-50',
   collection_ready: 'text-cyan-600 bg-cyan-50',
   staff_action: 'text-stone-600 bg-stone-50',
+  epos_refund: 'text-red-600 bg-red-50',
 };
 
 // Persistent audio context — unlocked on first user interaction

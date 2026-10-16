@@ -18,6 +18,7 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   gift_card_redeemed: 'Gift Card Redeemed',
   collection_ready: 'Collection Ready',
   staff_action: 'Staff Action',
+  epos_refund: 'EPOS Refund',
 };
 
 // Only types that still produce notifications — status changes, redemptions

@@ -75,6 +75,9 @@ Deno.serve(async (req) => {
         can_edit_bookings: isSuperAdmin || (isBoolean(staffData.canEditBookings) ? staffData.canEditBookings : false),
         can_add_walk_ins: isSuperAdmin || (isBoolean(staffData.canAddWalkIns) ? staffData.canAddWalkIns : false),
         can_delete_bookings: isSuperAdmin || (isBoolean(staffData.canDeleteBookings) ? staffData.canDeleteBookings : false),
+        can_epos_refunds: isSuperAdmin || (isBoolean(staffData.canEposRefunds) ? staffData.canEposRefunds : false),
+        can_epos_discounts: isSuperAdmin || (isBoolean(staffData.canEposDiscounts) ? staffData.canEposDiscounts : false),
+        can_epos_manage_products: isSuperAdmin || (isBoolean(staffData.canEposManageProducts) ? staffData.canEposManageProducts : false),
       };
       const allowedStudios = isSuperAdmin ? null :
         (Array.isArray(staffData.allowedStudios) && staffData.allowedStudios.length > 0 ? staffData.allowedStudios : null);
@@ -110,6 +113,9 @@ Deno.serve(async (req) => {
         can_edit_bookings: isUpdatedSuperAdmin || (isBoolean(staffData.canEditBookings) ? staffData.canEditBookings : false),
         can_add_walk_ins: isUpdatedSuperAdmin || (isBoolean(staffData.canAddWalkIns) ? staffData.canAddWalkIns : false),
         can_delete_bookings: isUpdatedSuperAdmin || (isBoolean(staffData.canDeleteBookings) ? staffData.canDeleteBookings : false),
+        can_epos_refunds: isUpdatedSuperAdmin || (isBoolean(staffData.canEposRefunds) ? staffData.canEposRefunds : false),
+        can_epos_discounts: isUpdatedSuperAdmin || (isBoolean(staffData.canEposDiscounts) ? staffData.canEposDiscounts : false),
+        can_epos_manage_products: isUpdatedSuperAdmin || (isBoolean(staffData.canEposManageProducts) ? staffData.canEposManageProducts : false),
         allowed_studios: isUpdatedSuperAdmin ? null :
           (Array.isArray(staffData.allowedStudios) && staffData.allowedStudios.length > 0 ? staffData.allowedStudios : null),
       };

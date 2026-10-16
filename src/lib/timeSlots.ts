@@ -11,6 +11,8 @@ export interface SlotConfig {
   // Extra slots merged in for a specific day-of-week (0=Sun..6=Sat),
   // e.g. evening painting slots on Sip & Paint nights.
   daySlots?: Record<number, string[]>;
+  // Slots on specific days that are flagged adults-only in the booking UI.
+  adultOnlySlots?: Record<number, string[]>;
 }
 
 export type StudioSlots = Record<SlotSessionType, SlotConfig>;
@@ -127,6 +129,10 @@ function migrateSessionConfig(session: unknown, defaults: SlotConfig): SlotConfi
     const daySlots: Record<number, string[]> | undefined = isDaySlots(rawDaySlots)
       ? Object.fromEntries(Object.entries(rawDaySlots).map(([k, v]) => [Number(k), sortSlots(v)]))
       : undefined;
+    const rawAdult = (session as Record<string, unknown>).adultOnlySlots;
+    const adultOnlySlots: Record<number, string[]> | undefined = isDaySlots(rawAdult)
+      ? Object.fromEntries(Object.entries(rawAdult).map(([k, v]) => [Number(k), v]))
+      : undefined;
     return {
       slots: {
         weekday: sortSlots(session.slots.weekday ?? defaults.slots.weekday),
@@ -137,6 +143,7 @@ function migrateSessionConfig(session: unknown, defaults: SlotConfig): SlotConfi
         : defaults.availableDays,
       enabled: typeof session.enabled === 'boolean' ? session.enabled : defaults.enabled,
       ...(daySlots ? { daySlots } : {}),
+      ...(adultOnlySlots ? { adultOnlySlots } : {}),
     };
   }
   return {
@@ -207,6 +214,11 @@ export function getSlots(type: SlotSessionType, studio: Studio, dayType: DayType
     slots = [...slots, ...config.daySlots[day].filter((s) => !slots.includes(s))];
   }
   return sortSlots(slots);
+}
+
+// Slots flagged adults-only for a specific day-of-week (empty when none).
+export function getAdultOnlySlots(type: SlotSessionType, studio: Studio, day: number): string[] {
+  return loadAll()[studio][type].adultOnlySlots?.[day] ?? [];
 }
 
 export function getAvailableDays(type: SlotSessionType, studio: Studio): number[] {

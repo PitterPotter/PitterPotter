@@ -386,6 +386,11 @@ struct TimeSlotsData {
                     } else {
                         config["enabled"] = true
                     }
+                    // Preserve per-day extra slots (e.g. evening painting slots
+                    // on Sip & Paint nights) so editing here doesn't wipe them.
+                    if let daySlots = newConfig["daySlots"] as? [String: [String]] {
+                        config["daySlots"] = daySlots
+                    }
                     if config["slots"] != nil {
                         studio[sessionKey] = config
                     }

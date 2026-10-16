@@ -8,6 +8,9 @@ export interface SlotConfig {
   slots: Record<DayType, string[]>;
   availableDays: number[];
   enabled: boolean;
+  // Extra slots merged in for a specific day-of-week (0=Sun..6=Sat),
+  // e.g. evening painting slots on Sip & Paint nights.
+  daySlots?: Record<number, string[]>;
 }
 
 export type StudioSlots = Record<SlotSessionType, SlotConfig>;
@@ -112,8 +115,18 @@ function migrateSessionSlots(slots: unknown, defaultSlots: string[]): Record<Day
   return { weekday: sortSlots(defaultSlots), weekend: sortSlots(defaultSlots) };
 }
 
+function isDaySlots(value: unknown): value is Record<string, string[]> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.entries(value as Record<string, unknown>)
+    .every(([k, v]) => /^[0-6]$/.test(k) && Array.isArray(v) && v.every((s) => typeof s === 'string'));
+}
+
 function migrateSessionConfig(session: unknown, defaults: SlotConfig): SlotConfig {
   if (isSessionConfig(session)) {
+    const rawDaySlots = (session as Record<string, unknown>).daySlots;
+    const daySlots: Record<number, string[]> | undefined = isDaySlots(rawDaySlots)
+      ? Object.fromEntries(Object.entries(rawDaySlots).map(([k, v]) => [Number(k), sortSlots(v)]))
+      : undefined;
     return {
       slots: {
         weekday: sortSlots(session.slots.weekday ?? defaults.slots.weekday),
@@ -123,6 +136,7 @@ function migrateSessionConfig(session: unknown, defaults: SlotConfig): SlotConfi
         ? session.availableDays
         : defaults.availableDays,
       enabled: typeof session.enabled === 'boolean' ? session.enabled : defaults.enabled,
+      ...(daySlots ? { daySlots } : {}),
     };
   }
   return {
@@ -182,11 +196,15 @@ function saveAllToLocalStorage(all: TimeSlotsData): void {
   } catch (err) { console.error('Failed to save time slots to storage:', err); }
 }
 
-export function getSlots(type: SlotSessionType, studio: Studio, dayType: DayType = 'weekday'): string[] {
-  const slots = loadAll()[studio][type].slots[dayType];
+export function getSlots(type: SlotSessionType, studio: Studio, dayType: DayType = 'weekday', day?: number): string[] {
+  const config = loadAll()[studio][type];
+  let slots = config.slots[dayType];
   // 18:00 is not offered for Sip & Paint on weekend days
   if (type === 'sip-and-paint' && dayType === 'weekend') {
-    return sortSlots(slots.filter((s) => s !== '18:00'));
+    slots = slots.filter((s) => s !== '18:00');
+  }
+  if (day !== undefined && config.daySlots?.[day]?.length) {
+    slots = [...slots, ...config.daySlots[day].filter((s) => !slots.includes(s))];
   }
   return sortSlots(slots);
 }

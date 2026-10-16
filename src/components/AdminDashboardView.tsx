@@ -4185,8 +4185,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                     {(() => {
                       const sType = newBooking.sessionType || 'painting';
                       const slotKey: SlotSessionType = ['birthday-party','baby-shower-hen','corporate'].includes(sType) ? 'party' : sType === 'clay-imprints' ? 'baby-prints' : sType === 'sip-and-paint' ? 'sip-and-paint' : 'painting';
-                      const dt: DayType = newBooking.date ? ((d => d === 0 || d === 6)(getDay(parseISO(newBooking.date))) ? 'weekend' : 'weekday') : 'weekday';
-                      return getSlots(slotKey, newBooking.studio || 'Putney', dt).map(s => <option key={s} value={s}>{s}</option>);
+                      const dayNum = newBooking.date ? getDay(parseISO(newBooking.date)) : undefined;
+                      const dt: DayType = dayNum !== undefined ? (dayNum === 0 || dayNum === 6 ? 'weekend' : 'weekday') : 'weekday';
+                      return getSlots(slotKey, newBooking.studio || 'Putney', dt, dayNum).map(s => <option key={s} value={s}>{s}</option>);
                     })()}
                   </select>
                 )}
@@ -4622,8 +4623,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                     {(() => {
                       const sType = editingBooking.sessionType || 'painting';
                       const slotKey: SlotSessionType = ['birthday-party','baby-shower-hen','corporate'].includes(sType) ? 'party' : sType === 'clay-imprints' ? 'baby-prints' : sType === 'sip-and-paint' ? 'sip-and-paint' : 'painting';
-                      const dt: DayType = editingBooking.date ? ((d => d === 0 || d === 6)(getDay(parseISO(editingBooking.date))) ? 'weekend' : 'weekday') : 'weekday';
-                      const slots = getSlots(slotKey, editingBooking.studio || 'Putney', dt);
+                      const dayNum = editingBooking.date ? getDay(parseISO(editingBooking.date)) : undefined;
+                      const dt: DayType = dayNum !== undefined ? (dayNum === 0 || dayNum === 6 ? 'weekend' : 'weekday') : 'weekday';
+                      const slots = getSlots(slotKey, editingBooking.studio || 'Putney', dt, dayNum);
                       const existing = editingBooking.time;
                       const allSlots = existing && !slots.includes(existing) ? [existing, ...slots] : slots;
                       return allSlots.map(s => <option key={s} value={s}>{s}</option>);

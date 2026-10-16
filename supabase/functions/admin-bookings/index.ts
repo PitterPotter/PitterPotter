@@ -935,6 +935,96 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === 'sendCustomEmail') {
+      const { subject, message } = body;
+      if (!isNonEmptyString(id) || !isNonEmptyString(subject) || !isNonEmptyString(message)) {
+        return new Response(JSON.stringify({ error: 'id, subject and message are required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: bookingRow } = await supabase
+        .from('bookings')
+        .select('booking_id, name, email, studio, date, time')
+        .eq('booking_id', id)
+        .single();
+      if (!bookingRow) {
+        return new Response(JSON.stringify({ error: 'Booking not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!isSuperAdmin && staff.allowed_studios && staff.allowed_studios.length > 0 && !staff.allowed_studios.includes(bookingRow.studio)) {
+        return new Response(JSON.stringify({ error: 'You can only contact customers for your assigned studio' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!bookingRow.email) {
+        return new Response(JSON.stringify({ error: 'Booking has no email address' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const resendKey = Deno.env.get('RESEND_API_KEY');
+      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'bookings@pitterpotter.co.uk';
+      if (!resendKey) {
+        return new Response(JSON.stringify({ error: 'Email service not configured' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const studioInfo = getStudioInfo(bookingRow.studio);
+      const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const bodyHtml = escapeHtml(message).replace(/\n/g, '<br/>');
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1B2D3C;">
+          <p>Hi ${escapeHtml(bookingRow.name?.split(' ')[0] || 'there')},</p>
+          <p>${bodyHtml}</p>
+          <p style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #DBE7E4; font-size: 12px; color: #666;">
+            <strong>Pitter Potter ${escapeHtml(bookingRow.studio)}</strong><br/>
+            ${escapeHtml(studioInfo.address)}<br/>
+            ${escapeHtml(studioInfo.phone)}
+          </p>
+          <p>Pitter Potter</p>
+        </div>`;
+
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: `Pitter Potter <${fromEmail}>`, to: bookingRow.email, subject, html }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        return new Response(JSON.stringify({ error: errorData.message || 'Failed to send email' }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const resendData = await response.json().catch(() => ({}));
+
+      try {
+        await supabase.from('email_logs').insert({
+          email_type: 'custom',
+          recipient: bookingRow.email,
+          subject,
+          body: html,
+          resend_id: resendData.id || null,
+          status: 'sent',
+          booking_id: bookingRow.booking_id,
+        });
+      } catch (logErr) {
+        console.error('Failed to log custom email:', logErr);
+      }
+
+      await logAudit(supabase, staff, 'send_custom_email', 'booking', bookingRow.booking_id, { subject, recipient: bookingRow.email });
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'delete') {
       if (!isSuperAdmin && !staff.can_delete_bookings) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), {

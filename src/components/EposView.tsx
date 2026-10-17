@@ -288,7 +288,7 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
                 className={`px-2 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-center leading-tight cursor-pointer ${activeCategory === 'all' ? 'bg-[#1B2D3C] text-white' : 'bg-white border-2 border-[#1B2D3C]/15 text-[#1B2D3C]'}`}
               >All</button>
               {categories.map(c => (
-                <button key={c.id} onClick={() => setActiveCategory(c.id)}
+                <button key={c.id} onClick={() => setActiveCategory(activeCategory === c.id ? 'all' : c.id)}
                   className={`px-2 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-center leading-tight cursor-pointer ${activeCategory === c.id ? 'text-white' : 'bg-white border-2 border-[#1B2D3C]/15 text-[#1B2D3C]'}`}
                   style={activeCategory === c.id ? { backgroundColor: c.color } : {}}>
                   {c.name}
@@ -325,8 +325,9 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
         )}
       </div>
 
-      {/* RIGHT: order panel */}
-      <div className="w-[380px] shrink-0 bg-white rounded-2xl border-2 border-[#1B2D3C]/10 flex flex-col overflow-hidden">
+      {/* RIGHT: order panel — sticky + height-capped so the items list scrolls
+          internally and totals/pay buttons are always on screen */}
+      <div className="w-[380px] shrink-0 self-start sticky top-4 max-h-[calc(100vh-10rem)] bg-white rounded-2xl border-2 border-[#1B2D3C]/10 flex flex-col overflow-hidden">
         <div className="p-3 border-b-2 border-[#1B2D3C]/10 bg-[#F5F2E8]">
           <div className="flex gap-2 items-center">
             <div className="relative flex-1">

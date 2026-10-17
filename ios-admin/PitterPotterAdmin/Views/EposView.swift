@@ -173,7 +173,8 @@ struct EposView: View {
 
     private func catChip(_ id: String?, label: String, color: Color) -> some View {
         let selected = activeCategory == id
-        return Button { activeCategory = id } label: {
+        // Tap the active category again to collapse the product list
+        return Button { activeCategory = selected ? nil : id } label: {
             Text(label.uppercased())
                 .font(AppFont.heading(11))
                 .foregroundStyle(selected ? .white : PPBrand.charcoal)

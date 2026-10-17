@@ -1412,8 +1412,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     checkRedeemBalance(scannedCode);
   };
 
-  // Unified scanner: collection QRs carry a booking token, gift voucher QRs
-  // carry the raw voucher code — route by content.
+  // Unified scanner: collection QRs carry a booking token (?token=… or
+  // token=…). Gift vouchers are handled in the Gift Vouchers tab instead.
   const handleUnifiedScan = (scannedCode: string) => {
     let token: string | null = null;
     try {
@@ -1426,7 +1426,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       setUnifiedScanning(false);
       const booking = inquiries.find(b => b.managementToken === token);
       if (!booking) {
-        setScanNotice({ title: 'No booking found', detail: 'This QR code does not match any booking or gift voucher.', tone: 'error' });
+        setScanNotice({ title: 'No booking found', detail: 'This QR code does not match any booking.', tone: 'error' });
         return;
       }
       if (resolveStage(booking) === 'collected') {
@@ -1449,10 +1449,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       return;
     }
 
-    // Not a collection QR — try it as a gift voucher code
     setUnifiedScanning(false);
-    openRedeemModal(scannedCode);
-    checkRedeemBalance(scannedCode);
+    setScanNotice({ title: 'No booking found', detail: 'This QR code does not match any booking.', tone: 'error' });
   };
 
   const loadStaffList = async () => {
@@ -3029,11 +3027,11 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               />
             ))}
 
-            {/* Scan QR — unified scanner: collection QRs mark collected, voucher QRs open redeem */}
+            {/* Scan QR — unified scanner: collection QRs mark collected */}
             <button
               onClick={() => setUnifiedScanning(true)}
               className="relative shrink-0 px-4 py-2.5 text-xs font-bold tracking-wide text-[#1B2D3C]/50 hover:text-[#1B2D3C] transition-all cursor-pointer flex items-center gap-2"
-              title="Scan a collection QR or gift voucher QR"
+              title="Scan a booking or collection QR"
             >
               <ScanLine className="w-3.5 h-3.5" /> Scan QR
             </button>
@@ -3095,7 +3093,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                 <Gift className="w-4 h-4" /> Redeem / Check Balance
               </button>
               <button
-                onClick={() => setUnifiedScanning(true)}
+                onClick={() => openRedeemModal(undefined, true)}
                 className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#1B2D3C] text-xs font-bold uppercase tracking-wider rounded-lg border border-[#1B2D3C]/20 hover:bg-[#D6E2E9] transition-all cursor-pointer"
               >
                 <ScanLine className="w-4 h-4" /> Scan QR
@@ -5380,7 +5378,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
         />
       )}
 
-      {/* Unified QR Scanner — collection tokens collect bookings, voucher codes open redeem */}
+      {/* Unified QR Scanner — collection tokens collect bookings */}
       {unifiedScanning && (
         <QRScanner
           onScan={handleUnifiedScan}

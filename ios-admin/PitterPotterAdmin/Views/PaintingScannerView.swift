@@ -9,9 +9,6 @@ struct PaintingScannerView: View {
     @State private var scanError: String?
     @State private var scannedBooking: Booking?
     @State private var isMarking = false
-    @State private var voucherCode: String? = nil
-    @State private var showVoucherRedeem = false
-    @State private var isCheckingVoucher = false
     @State private var manualCode = ""
     @State private var showPhotoModal = false
 
@@ -49,10 +46,6 @@ struct PaintingScannerView: View {
                     Button("Close") { dismiss() }
                 }
             }
-            .sheet(isPresented: $showVoucherRedeem) {
-                GiftCardRedeemView(initialCode: voucherCode ?? "")
-                    .environmentObject(authVM)
-            }
             .fullScreenCover(isPresented: $showPhotoModal) {
                 if let photos = scannedBooking?.photos {
                     ImageModal(images: photos, initialIndex: 0, onClose: { showPhotoModal = false }, photoTags: scannedBooking?.photoTags)
@@ -71,7 +64,7 @@ struct PaintingScannerView: View {
                 Text("Scan QR Code")
                     .font(AppFont.heading(16))
                     .foregroundStyle(PPBrand.charcoal)
-                Text("Point the camera at any QR code — collection, booking, or gift card")
+                Text("Point the camera at a booking or collection QR code")
                     .font(AppFont.body(12, weight: .medium))
                     .foregroundStyle(PPBrand.charcoal.opacity(0.6))
                     .multilineTextAlignment(.center)
@@ -319,8 +312,8 @@ struct PaintingScannerView: View {
         }
     }
 
-    // Unified scan: collection QRs carry a booking token (?token=…), gift
-    // voucher QRs carry the raw voucher code — route by content.
+    // Unified scan: collection QRs carry a booking token (?token=… or
+    // token=…). Gift vouchers live in the Gift Vouchers tab instead.
     private func handleScannedCode(_ code: String) {
         scannedCode = nil
         var token: String?
@@ -347,29 +340,7 @@ struct PaintingScannerView: View {
                     scannedBooking = booking
                     Haptics.success()
                 } else {
-                    // Not a booking token — try it as a gift voucher code
-                    checkVoucher(token)
-                }
-            }
-        }
-    }
-
-    private func checkVoucher(_ code: String) {
-        guard let staff = authVM.staff else { return }
-        isCheckingVoucher = true
-        Task {
-            do {
-                _ = try await APIClient.shared.checkGiftCardBalance(code: code, staff: staff)
-                await MainActor.run {
-                    isCheckingVoucher = false
-                    voucherCode = code
-                    showVoucherRedeem = true
-                    Haptics.success()
-                }
-            } catch {
-                await MainActor.run {
-                    isCheckingVoucher = false
-                    scanError = "No booking or gift voucher found for this QR code"
+                    scanError = "No booking found for this QR code"
                     Haptics.error()
                 }
             }

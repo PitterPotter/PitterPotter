@@ -5,6 +5,7 @@ struct DashboardOverviewView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var toastManager: ToastManager
     @State private var giftCards: [GiftCard] = []
+    @State private var lowStock: [ReorderRow] = []
     @State private var showingNewWalkIn = false
     @State private var showingPartyBooking = false
     @State private var showingGhostBooking = false
@@ -176,6 +177,8 @@ struct DashboardOverviewView: View {
 
                     noPhotoAlertSection
 
+                    lowStockSection
+
                     collectionSummarySection
 
                     quickActionsRow
@@ -207,10 +210,14 @@ struct DashboardOverviewView: View {
                 if let staff = authVM.staff {
                     await bookingsVM.loadBookings(staff: staff)
                     await loadGiftCards()
+                    await loadLowStock()
                 }
             }
             .task {
                 await loadGiftCards()
+            }
+            .task(id: selectedStudio) {
+                await loadLowStock()
             }
             .onAppear {
                 guard let staff = authVM.staff else { return }
@@ -433,6 +440,86 @@ struct DashboardOverviewView: View {
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0xFCD34D), lineWidth: 1))
             }
         }
+    }
+
+    // MARK: - Low Stock
+
+    private var lowStockSection: some View {
+        Group {
+            if !lowStock.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(AppFont.body(14, weight: .bold))
+                                .foregroundStyle(Color(hex: 0x92400E))
+                            Text("\(lowStock.count) product\(lowStock.count != 1 ? "s" : "") low on stock")
+                                .font(AppFont.heading(13))
+                                .foregroundStyle(Color(hex: 0x92400E))
+                                .textCase(.uppercase)
+                                .tracking(0.5)
+                        }
+                        Spacer()
+                        NavigationLink {
+                            EposStockView()
+                                .environmentObject(authVM)
+                                .environmentObject(bookingsVM)
+                        } label: {
+                            HStack(spacing: 2) {
+                                Text("Stock")
+                                    .font(AppFont.body(10, weight: .bold))
+                                    .textCase(.uppercase)
+                                Image(systemName: "chevron.right")
+                                    .font(AppFont.body(10, weight: .bold))
+                            }
+                            .foregroundStyle(Color(hex: 0xB45309))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    ForEach(Array(lowStock.prefix(4))) { r in
+                        HStack(spacing: 10) {
+                            Text(r.epos_products?.name ?? "—")
+                                .font(AppFont.body(12, weight: .bold))
+                                .foregroundStyle(Color(hex: 0x92400E))
+                                .lineLimit(1)
+                            Spacer()
+                            Text(r.studio)
+                                .font(AppFont.body(10, weight: .bold))
+                                .foregroundStyle(Color(hex: 0xB45309).opacity(0.7))
+                            Text(r.quantity <= 0 ? "OUT" : "\(r.quantity) left")
+                                .font(AppFont.body(10, weight: .black))
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(r.quantity <= 0 ? Color(hex: 0xFEE2E2) : Color(hex: 0xFEF3C7))
+                                .foregroundStyle(r.quantity <= 0 ? Color(hex: 0xB91C1C) : Color(hex: 0x92400E))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
+
+                    if lowStock.count > 4 {
+                        Text("+\(lowStock.count - 4) more...")
+                            .font(AppFont.body(10, weight: .medium))
+                            .foregroundStyle(Color(hex: 0xB45309).opacity(0.7))
+                    }
+                }
+                .padding(16)
+                .background(Color(hex: 0xFFFBEB).opacity(0.8))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0xFCD34D), lineWidth: 1))
+            }
+        }
+    }
+
+    private func loadLowStock() async {
+        guard let staff = authVM.staff else { return }
+        let scoped = (staff.visibleStudios.map(\.rawValue)).filter { selectedStudio == nil || $0 == selectedStudio }
+        var all: [ReorderRow] = []
+        for s in scoped {
+            if let r = try? await APIClient.shared.eposStockReorderList(studio: s, staff: staff) {
+                all.append(contentsOf: r)
+            }
+        }
+        lowStock = all
     }
 
     // MARK: - Collection Summary

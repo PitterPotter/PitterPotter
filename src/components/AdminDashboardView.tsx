@@ -5,6 +5,7 @@ import FloorPlanView from './FloorPlanView';
 import WimbledonFloorPlan from './WimbledonFloorPlan';
 import PutneyFloorPlan from './PutneyFloorPlan';
 import EposView from './EposView';
+import EposStockView from './EposStockView';
 import EposProductsTab from './admin/EposProductsTab';
 import EposReportsTab from './admin/EposReportsTab';
 import { allocateResources as allocateResourcesFromBookings, formatResources, isPartySessionType } from '../lib/allocation';
@@ -15,6 +16,7 @@ import { format, isSameDay, parseISO, getDay } from 'date-fns';
 import { BookingInquiry, GiftCard, Staff, AuditLog, GiftCardApiRow, StaffApiRow, EmailTemplate, SMSTemplate, EmailLog } from '../types';
 import { supabase, isSupabaseEnabled } from '../lib/supabase';
 import { loadBookings, createBooking, updateBooking, patchBooking, updateBookingStatus, deleteBooking, getRemainingCapacity, sendDepositLink, getPaymentDetails, blockStudio } from '../lib/bookings';
+import { eposStockReorderList, type ReorderRow } from '../lib/epos';
 import type { StripePaymentDetails } from '../lib/bookings';
 import { compressImage } from '../lib/imageCompression';
 import QRScanner from './QRScanner';
@@ -90,7 +92,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   const [inquiries, setInquiries] = useState<BookingInquiry[]>([]);
   const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'gift-cards' | 'floor-plan' | 'epos' | 'epos-products' | 'epos-sales' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation'>(staff.role === 'super_admin' ? 'dashboard' : 'bookings');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'stock' | 'gift-cards' | 'floor-plan' | 'epos' | 'epos-products' | 'epos-sales' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation'>(staff.role === 'super_admin' ? 'dashboard' : 'bookings');
   const [floorPlanStudio, setFloorPlanStudio] = useState<'Putney' | 'Wimbledon'>(staff.allowedStudios?.[0] === 'Putney' ? 'Putney' : 'Wimbledon');
   const [floorPlanDate, setFloorPlanDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
@@ -240,6 +242,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
   }>({ isOpen: false, title: '', message: '', confirmLabel: 'Confirm', variant: 'danger', onConfirm: () => {} });
   const [photoUploading, setPhotoUploading] = useState(false);
   const [eposBillBooking, setEposBillBooking] = useState<BookingInquiry | null>(null);
+  const [lowStock, setLowStock] = useState<ReorderRow[]>([]);
 
   const showConfirmDialog = (opts: { title: string; message: string; confirmLabel?: string; variant?: 'danger' | 'warning'; onConfirm: () => void }) => {
     setConfirmDialog({ isOpen: true, confirmLabel: 'Confirm', variant: 'danger', ...opts });
@@ -1483,6 +1486,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
           canEposRefunds: !!row.can_epos_refunds,
           canEposDiscounts: !!row.can_epos_discounts,
           canEposManageProducts: !!row.can_epos_manage_products,
+          canEposStock: !!row.can_epos_stock,
           allowedStudios: row.allowed_studios && row.allowed_studios.length > 0 ? row.allowed_studios : undefined,
           createdAt: row.created_at,
         }));
@@ -1749,6 +1753,26 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     if (!staffAllowedStudios) return true;
     return staffAllowedStudios.includes(booking.studio as 'Putney' | 'Wimbledon');
   };
+
+  // Low-stock alerts for the dashboard — scoped to the visible studios.
+  useEffect(() => {
+    if (!staff?.sessionToken) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const studios = studioFilter === 'all'
+          ? (staffAllowedStudios && staffAllowedStudios.length > 0 ? staffAllowedStudios : ['Putney', 'Wimbledon'] as const)
+          : [studioFilter];
+        const all: ReorderRow[] = [];
+        for (const s of studios) {
+          const r = await eposStockReorderList(staff, s);
+          all.push(...r.reorder);
+        }
+        if (!cancelled) setLowStock(all);
+      } catch { /* stock module may not be deployed yet — hide the card */ }
+    })();
+    return () => { cancelled = true; };
+  }, [staff?.sessionToken, staff, studioFilter, staffAllowedStudios]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateProfile = async (data: { name: string; phone: string; date: string; studio: string; photos: string[] }, stage: 'painted' | 'ready'): Promise<BookingInquiry> => {
     const bookingId = crypto.randomUUID();
@@ -2342,6 +2366,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
     canEposRefunds: false,
     canEposDiscounts: false,
     canEposManageProducts: false,
+    canEposStock: false,
     allowedStudios: [] as ('Putney' | 'Wimbledon')[],
   });
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -2377,6 +2402,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       canEposRefunds: staffMember.canEposRefunds || false,
       canEposDiscounts: staffMember.canEposDiscounts || false,
       canEposManageProducts: staffMember.canEposManageProducts || false,
+      canEposStock: staffMember.canEposStock || false,
       allowedStudios: staffMember.allowedStudios || [],
     });
     setShowStaffModal(true);
@@ -2426,6 +2452,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               canEposRefunds: newStaff.canEposRefunds,
               canEposDiscounts: newStaff.canEposDiscounts,
               canEposManageProducts: newStaff.canEposManageProducts,
+              canEposStock: newStaff.canEposStock,
               allowedStudios: newStaff.role === 'super_admin' ? null : (newStaff.allowedStudios.length > 0 ? newStaff.allowedStudios : null),
             },
           }),
@@ -2456,6 +2483,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
       canEposRefunds: false,
       canEposDiscounts: false,
       canEposManageProducts: false,
+      canEposStock: false,
       allowedStudios: [],
     });
     setEditingStaff(null);
@@ -2979,6 +3007,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               { value: 'ready', label: 'Ready', badge: null },
               { value: 'collected', label: 'Collected', badge: null },
               { value: 'all-files', label: 'All Files', badge: null },
+              { value: 'stock', label: 'Stock', badge: null },
               ...(isSuperAdmin ? [{ value: 'sms', label: 'SMS', badge: null }] : []),
             ].map((tab) => (
               <NavTab
@@ -3069,6 +3098,8 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
             onNavigateToReady={() => setActiveTab('ready')}
             onNavigateToCollected={() => setActiveTab('collected')}
             onNavigateToAddBooking={() => setShowAddModal(true)}
+            lowStock={lowStock}
+            onNavigateToStock={() => setActiveTab('stock')}
           />
         )}
 
@@ -3835,6 +3866,16 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
               )}
             </div>
           </div>
+        )}
+
+        {activeTab === 'stock' && (
+          <EposStockView
+            staff={staff}
+            studio={studioFilter}
+            isSuperAdmin={isSuperAdmin}
+            canStock={isSuperAdmin || !!staff.canEposStock || !!staff.canEposManageProducts}
+            showToast={showToast}
+          />
         )}
 
         {activeTab === 'epos' && (
@@ -4879,9 +4920,9 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                     <label className="block text-[10px] font-bold text-[#1B2D3C] uppercase tracking-wider">Permission Presets</label>
                     <div className="flex gap-2 flex-wrap">
                       {[
-                        { label: 'Manager', permissions: { canUpdateStatus: true, canEditBookings: true, canAddWalkIns: true, canDeleteBookings: true, canEposRefunds: true, canEposDiscounts: true, canEposManageProducts: false } },
-                        { label: 'Front Desk', permissions: { canUpdateStatus: true, canEditBookings: false, canAddWalkIns: true, canDeleteBookings: false, canEposRefunds: false, canEposDiscounts: true, canEposManageProducts: false } },
-                        { label: 'Studio Assistant', permissions: { canUpdateStatus: false, canEditBookings: false, canAddWalkIns: true, canDeleteBookings: false, canEposRefunds: false, canEposDiscounts: false, canEposManageProducts: false } },
+                        { label: 'Manager', permissions: { canUpdateStatus: true, canEditBookings: true, canAddWalkIns: true, canDeleteBookings: true, canEposRefunds: true, canEposDiscounts: true, canEposManageProducts: false, canEposStock: true } },
+                        { label: 'Front Desk', permissions: { canUpdateStatus: true, canEditBookings: false, canAddWalkIns: true, canDeleteBookings: false, canEposRefunds: false, canEposDiscounts: true, canEposManageProducts: false, canEposStock: false } },
+                        { label: 'Studio Assistant', permissions: { canUpdateStatus: false, canEditBookings: false, canAddWalkIns: true, canDeleteBookings: false, canEposRefunds: false, canEposDiscounts: false, canEposManageProducts: false, canEposStock: false } },
                       ].map(preset => (
                         <button
                           key={preset.label}
@@ -4959,6 +5000,15 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
                       className="w-4 h-4 accent-[#1B2D3C]"
                     />
                     Manage EPOS products
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[#1B2D3C] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newStaff.canEposStock}
+                      onChange={(e) => setNewStaff({ ...newStaff, canEposStock: e.target.checked })}
+                      className="w-4 h-4 accent-[#1B2D3C]"
+                    />
+                    Manage stock (receive / adjust / transfer / stocktake)
                   </label>
                   </div>
                 </div>
@@ -6880,7 +6930,7 @@ export default function AdminDashboardView({ staff, onLogout }: AdminDashboardPr
 
 // --- Grouped Navigation Dropdowns ---
 
-type TabValue = 'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'gift-cards' | 'floor-plan' | 'epos' | 'epos-products' | 'epos-sales' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation';
+type TabValue = 'dashboard' | 'bookings' | 'painted' | 'ready' | 'collected' | 'all-files' | 'stock' | 'gift-cards' | 'floor-plan' | 'epos' | 'epos-products' | 'epos-sales' | 'settings' | 'analytics' | 'audit-logs' | 'webmaster' | 'email-logs' | 'email-templates' | 'sms' | 'documentation';
 
 function NavTab({
   label,

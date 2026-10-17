@@ -14,6 +14,7 @@ struct Staff: Codable, Identifiable {
     let canEposRefunds: Bool
     let canEposDiscounts: Bool
     let canEposManageProducts: Bool
+    let canEposStock: Bool
     let allowedStudios: [String]?
     let sessionToken: String
 
@@ -26,8 +27,36 @@ struct Staff: Codable, Identifiable {
         case canEposRefunds
         case canEposDiscounts
         case canEposManageProducts
+        case canEposStock
         case allowedStudios
         case sessionToken
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        username = try c.decode(String.self, forKey: .username)
+        role = try c.decode(String.self, forKey: .role)
+        canUpdateStatus = try c.decode(Bool.self, forKey: .canUpdateStatus)
+        canEditBookings = try c.decode(Bool.self, forKey: .canEditBookings)
+        canAddWalkIns = try c.decode(Bool.self, forKey: .canAddWalkIns)
+        canDeleteBookings = try c.decode(Bool.self, forKey: .canDeleteBookings)
+        canEposRefunds = try c.decodeIfPresent(Bool.self, forKey: .canEposRefunds) ?? false
+        canEposDiscounts = try c.decodeIfPresent(Bool.self, forKey: .canEposDiscounts) ?? false
+        canEposManageProducts = try c.decodeIfPresent(Bool.self, forKey: .canEposManageProducts) ?? false
+        canEposStock = try c.decodeIfPresent(Bool.self, forKey: .canEposStock) ?? false
+        allowedStudios = try c.decodeIfPresent([String].self, forKey: .allowedStudios)
+        sessionToken = try c.decode(String.self, forKey: .sessionToken)
+    }
+
+    init(id: String, name: String, username: String, role: String, canUpdateStatus: Bool, canEditBookings: Bool, canAddWalkIns: Bool, canDeleteBookings: Bool, canEposRefunds: Bool, canEposDiscounts: Bool, canEposManageProducts: Bool, canEposStock: Bool = false, allowedStudios: [String]?, sessionToken: String) {
+        self.id = id; self.name = name; self.username = username; self.role = role
+        self.canUpdateStatus = canUpdateStatus; self.canEditBookings = canEditBookings
+        self.canAddWalkIns = canAddWalkIns; self.canDeleteBookings = canDeleteBookings
+        self.canEposRefunds = canEposRefunds; self.canEposDiscounts = canEposDiscounts
+        self.canEposManageProducts = canEposManageProducts; self.canEposStock = canEposStock
+        self.allowedStudios = allowedStudios; self.sessionToken = sessionToken
     }
 
     var isSuperAdmin: Bool { role == "super_admin" }
@@ -58,6 +87,7 @@ struct StaffMember: Codable, Identifiable, Hashable {
     var canEposRefunds: Bool = false
     var canEposDiscounts: Bool = false
     var canEposManageProducts: Bool = false
+    var canEposStock: Bool = false
     var allowedStudios: [String]?
     var createdAt: String?
 
@@ -70,6 +100,7 @@ struct StaffMember: Codable, Identifiable, Hashable {
         case canEposRefunds = "can_epos_refunds"
         case canEposDiscounts = "can_epos_discounts"
         case canEposManageProducts = "can_epos_manage_products"
+        case canEposStock = "can_epos_stock"
         case allowedStudios = "allowed_studios"
         case createdAt = "created_at"
     }
@@ -352,7 +383,9 @@ struct EposProduct: Codable, Identifiable, Hashable {
     var image_url: String?
     var studios: [String]
     var active: Bool
+    var track_stock: Bool?   // nil until the stock migration deploys — treat as tracked
     var sort_order: Int
+    var tracksStock: Bool { track_stock ?? true }
 }
 
 struct EposDiscount: Codable, Identifiable, Hashable {
@@ -426,7 +459,109 @@ struct EposBootstrap: Codable {
     let categories: [EposCategory]
     let products: [EposProduct]
     let discounts: [EposDiscount]
+    let stock: [String: StockLevel]?
     let cardProvider: String
+}
+
+struct StockLevel: Codable {
+    let quantity: Int
+    let min_stock: Int
+}
+
+// MARK: - Stock & inventory
+
+struct StockStudioInfo: Codable {
+    let quantity: Int
+    let min_stock: Int
+    let reorder_qty: Int
+    let qty_sold: Int
+    let revenue: Double
+    let low: Bool
+}
+
+struct StockRow: Codable, Identifiable {
+    let id: String
+    let name: String
+    let sku: String?
+    let price: Double
+    let image_url: String?
+    let category_id: String?
+    let category: String
+    let track_stock: Bool
+    let studios: [String: StockStudioInfo]
+}
+
+struct StockOverviewResponse: Codable {
+    let rows: [StockRow]
+    let studios: [String]
+}
+
+struct StockMovement: Codable, Identifiable {
+    let id: String
+    let product_id: String
+    let studio: String
+    let change_qty: Int
+    let type: String
+    let reason: String?
+    let order_id: String?
+    let staff_name: String?
+    let quantity_after: Int
+    let created_at: String
+    let epos_products: MovementProduct?
+    struct MovementProduct: Codable { let name: String }
+}
+
+struct ReorderRow: Codable, Identifiable {
+    var id: String { "\(product_id)-\(studio)" }
+    let product_id: String
+    let studio: String
+    let quantity: Int
+    let min_stock: Int
+    let reorder_qty: Int
+    let epos_products: ReorderProduct?
+    struct ReorderProduct: Codable {
+        let name: String
+        let sku: String?
+        let price: Double
+        let active: Bool
+        let track_stock: Bool
+    }
+}
+
+struct StocktakeItem: Codable, Identifiable {
+    let id: String
+    let product_id: String
+    let expected_qty: Int
+    let counted_qty: Int
+    let difference: Int
+    let epos_products: MovementProduct?
+    typealias MovementProduct = StockMovement.MovementProduct
+}
+
+struct Stocktake: Codable, Identifiable {
+    let id: String
+    let studio: String
+    let note: String?
+    let staff_name: String?
+    let created_at: String
+    let epos_stocktake_items: [StocktakeItem]?
+}
+
+struct StockReportRow: Codable, Identifiable {
+    var id: String { product_id }
+    let product_id: String
+    let name: String
+    let category: String
+    let qty_sold: Int
+    let revenue: Double
+    let by_studio: [String: StudioSales]
+    let received: Int
+    let breakages: Int
+    let adjustments: Int
+    let transfers_in: Int
+    let transfers_out: Int
+    let stocktake: Int
+    struct StudioSales: Codable { let qty: Int; let revenue: Double }
 }
 
 struct EposOrderFull: Codable {

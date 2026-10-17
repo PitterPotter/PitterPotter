@@ -18,6 +18,7 @@ class AuthViewModel: ObservableObject {
     @AppStorage("pp_staff_can_epos_refunds") private var storedCanEposRefunds: Bool = false
     @AppStorage("pp_staff_can_epos_discounts") private var storedCanEposDiscounts: Bool = false
     @AppStorage("pp_staff_can_epos_products") private var storedCanEposProducts: Bool = false
+    @AppStorage("pp_staff_can_epos_stock") private var storedCanEposStock: Bool = false
     @AppStorage("pp_staff_allowed_studios") private var storedAllowedStudios: String = ""
 
     var isLoggedIn: Bool {
@@ -46,6 +47,7 @@ class AuthViewModel: ObservableObject {
             canEposRefunds: storedCanEposRefunds,
             canEposDiscounts: storedCanEposDiscounts,
             canEposManageProducts: storedCanEposProducts,
+            canEposStock: storedCanEposStock,
             allowedStudios: storedAllowedStudios.isEmpty ? nil : storedAllowedStudios.components(separatedBy: ","),
             sessionToken: token
         )
@@ -69,6 +71,7 @@ class AuthViewModel: ObservableObject {
             storedCanEposRefunds = result.canEposRefunds
             storedCanEposDiscounts = result.canEposDiscounts
             storedCanEposProducts = result.canEposManageProducts
+            storedCanEposStock = result.canEposStock
             storedAllowedStudios = result.allowedStudios?.joined(separator: ",") ?? ""
             Analytics.startSession()
             Analytics.track("login", properties: ["username": result.username, "role": result.role])
@@ -94,6 +97,7 @@ class AuthViewModel: ObservableObject {
         storedCanEposRefunds = false
         storedCanEposDiscounts = false
         storedCanEposProducts = false
+        storedCanEposStock = false
         storedAllowedStudios = ""
         Analytics.track("logout")
     }

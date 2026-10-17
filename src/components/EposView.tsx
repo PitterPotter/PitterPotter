@@ -32,6 +32,7 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [search, setSearch] = useState('');
 
+  const [stock, setStock] = useState<Record<string, { quantity: number; min_stock: number }>>({});
   const [order, setOrder] = useState<EposOrder | null>(null);
   const [items, setItems] = useState<EposOrderItem[]>([]);
   const [payments, setPayments] = useState<EposPayment[]>([]);
@@ -63,6 +64,7 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
       setCategories(b.categories);
       setProducts(b.products);
       setDiscounts(b.discounts);
+      setStock(b.stock || {});
       setCardProvider(b.cardProvider);
       const [t, o] = await Promise.all([eposListTables(staff, studio), eposOpenOrders(staff, studio)]);
       setTables(t.tables);
@@ -146,6 +148,14 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
 
   const addProduct = async (productId: string) => {
     if (!order) { showToast('Select or create an order first', 'error'); return; }
+    // Warn-but-allow: flag low/empty stock but never block the sale.
+    const prod = products.find(p => p.id === productId);
+    const s = stock[productId];
+    if (prod?.track_stock !== false && s && s.quantity <= 0) {
+      showToast(`${prod?.name || 'Product'}: no stock recorded — check shelf/stock tab`, 'error');
+    } else if (prod?.track_stock !== false && s && s.min_stock > 0 && s.quantity <= s.min_stock) {
+      showToast(`${prod?.name || 'Product'} is at/below minimum stock (${s.quantity} left)`, 'error');
+    }
     setBusy(true);
     try {
       const res = await eposAddItem(staff, order.id, { productId, quantity: 1 });
@@ -226,7 +236,15 @@ export default function EposView({ staff, studio, bookings, showToast, billBooki
       className="bg-white rounded-xl border-2 border-[#1B2D3C]/10 p-3 text-left hover:border-[#1B2D3C]/40 active:scale-95 transition-all disabled:opacity-50 min-h-[72px] flex flex-col justify-between"
     >
       <span className="text-sm font-bold text-[#1B2D3C] leading-tight line-clamp-2">{p.name}</span>
-      <span className="text-base font-black text-[#1B2D3C]">{fmt(p.price)}</span>
+      <span className="flex items-center gap-1.5">
+        <span className="text-base font-black text-[#1B2D3C]">{fmt(p.price)}</span>
+        {p.track_stock !== false && stock[p.id] && stock[p.id].quantity <= 0 && (
+          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600">0 left</span>
+        )}
+        {p.track_stock !== false && stock[p.id] && stock[p.id].quantity > 0 && stock[p.id].min_stock > 0 && stock[p.id].quantity <= stock[p.id].min_stock && (
+          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{stock[p.id].quantity} left</span>
+        )}
+      </span>
     </button>
   );
 

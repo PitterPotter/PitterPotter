@@ -20,12 +20,17 @@ type StaffWithEpos = StaffRecord & {
   can_epos_refunds?: boolean;
   can_epos_discounts?: boolean;
   can_epos_manage_products?: boolean;
+  can_epos_stock?: boolean;
   allowed_studios?: string[] | null;
 };
+
+const STOCK_ADJUST_REASONS = ['breakage', 'damaged', 'missing', 'stocktake_correction', 'complimentary', 'staff_use', 'other'];
+const STOCK_MOVEMENT_TYPES = ['sale', 'receive', 'transfer_out', 'transfer_in', 'adjust', 'stocktake'];
 
 const canManageProducts = (s: StaffWithEpos) => s.role === 'super_admin' || !!s.can_epos_manage_products;
 const canDiscount = (s: StaffWithEpos) => s.role === 'super_admin' || !!s.can_epos_discounts;
 const canRefund = (s: StaffWithEpos) => s.role === 'super_admin' || !!s.can_epos_refunds;
+const canStock = (s: StaffWithEpos) => s.role === 'super_admin' || !!s.can_epos_stock || !!s.can_epos_manage_products;
 const canAccessStudio = (s: StaffWithEpos, studio: string) =>
   s.role === 'super_admin' || !s.allowed_studios || s.allowed_studios.length === 0 || s.allowed_studios.includes(studio);
 
@@ -69,6 +74,18 @@ async function recalcOrder(supabase: AdminSupabaseClient, orderId: string) {
     status,
     closed_at: status === 'paid' ? (order.closed_at || new Date().toISOString()) : null,
   }).eq('id', orderId);
+
+  // Deduct stock exactly once when the order first becomes fully paid.
+  // The DB function is idempotent (unique sale movement per product+order),
+  // so payment retries and the Dojo poll path cannot double-deduct.
+  if (status === 'paid' && order.status !== 'paid') {
+    try {
+      await supabase.rpc('epos_deduct_order_stock' as never, { p_order_id: orderId } as never);
+    } catch (e) {
+      // Never fail the sale over stock — it can be corrected by adjustment.
+      console.error('stock deduction failed for order', orderId, e);
+    }
+  }
 
   return { ...order, subtotal: totals.subtotal, vat_total: totals.vatAfterDiscount, total: totals.total, paid_total: toPounds(paidPence), status };
 }
@@ -186,12 +203,15 @@ Deno.serve(async (req) => {
     if (action === 'bootstrap') {
       const { studio } = body;
       if (!isNonEmptyString(studio) || !canAccessStudio(staff, studio)) return err('Invalid or inaccessible studio', corsHeaders, 403);
-      const [{ data: categories }, { data: products }, { data: discounts }] = await Promise.all([
+      const [{ data: categories }, { data: products }, { data: discounts }, { data: stockRows }] = await Promise.all([
         supabase.from('epos_categories').select('*').eq('active', true).order('sort_order'),
         supabase.from('epos_products').select('*').eq('active', true).contains('studios', [studio]).order('sort_order'),
         supabase.from('epos_discounts').select('*').eq('active', true).order('sort_order'),
+        supabase.from('epos_stock').select('product_id,quantity,min_stock').eq('studio', studio),
       ]);
-      return json({ categories: categories || [], products: products || [], discounts: discounts || [], cardProvider: cardProvider() }, corsHeaders);
+      const stock: Record<string, { quantity: number; min_stock: number }> = {};
+      for (const s of stockRows || []) stock[s.product_id] = { quantity: s.quantity, min_stock: s.min_stock };
+      return json({ categories: categories || [], products: products || [], discounts: discounts || [], stock, cardProvider: cardProvider() }, corsHeaders);
     }
 
     if (action === 'listTables') {
@@ -786,6 +806,315 @@ Deno.serve(async (req) => {
       }
       await logAudit(supabase, staff, 'email_receipt', 'epos_order', orderId, { email });
       return json({ success: true }, corsHeaders);
+    }
+
+    // ---------- Stock & inventory ----------
+    // Studio scoping: staff act only on studios in allowed_studios;
+    // 'all' studio views are super_admin only. Reads are open to any
+    // staff with studio access; mutations require can_epos_stock.
+
+    if (action === 'stockOverview') {
+      const { studio } = body;
+      const allStudios = studio === 'all';
+      if (allStudios && staff.role !== 'super_admin') return err('Forbidden', corsHeaders, 403);
+      if (!allStudios && (!isNonEmptyString(studio) || !canAccessStudio(staff, studio))) {
+        return err('Invalid or inaccessible studio', corsHeaders, 403);
+      }
+      const studios = allStudios ? ['Putney', 'Wimbledon'] : [studio];
+      const [{ data: products }, { data: stockRows }, { data: sales }, { data: cats }] = await Promise.all([
+        supabase.from('epos_products').select('*,epos_categories(name)').eq('active', true).order('name'),
+        supabase.from('epos_stock').select('*').in('studio', studios),
+        supabase.from('epos_product_sales').select('*').in('studio', studios),
+        supabase.from('epos_categories').select('id,name'),
+      ]);
+      const catName = new Map((cats || []).map((c) => [c.id, c.name]));
+      const stockBy: Record<string, Record<string, unknown>> = {};
+      for (const s of stockRows || []) stockBy[`${s.product_id}|${s.studio}`] = s;
+      const soldBy: Record<string, Record<string, unknown>> = {};
+      for (const s of sales || []) soldBy[`${s.product_id}|${s.studio}`] = s;
+      const rows = (products || []).map((p) => {
+        const perStudio: Record<string, unknown> = {};
+        for (const st of studios) {
+          const s = stockBy[`${p.id}|${st}`] as { quantity?: number; min_stock?: number; reorder_qty?: number } | undefined;
+          const sold = soldBy[`${p.id}|${st}`] as { qty_sold?: number; revenue?: number } | undefined;
+          const qty = s?.quantity ?? 0;
+          const min = s?.min_stock ?? 0;
+          perStudio[st] = {
+            quantity: qty, min_stock: min, reorder_qty: s?.reorder_qty ?? 0,
+            qty_sold: Number(sold?.qty_sold ?? 0), revenue: Number(sold?.revenue ?? 0),
+            low: p.track_stock && (qty < 0 || (min > 0 && qty <= min)),
+          };
+        }
+        return {
+          id: p.id, name: p.name, sku: p.sku, price: p.price, image_url: p.image_url,
+          category_id: p.category_id, category: catName.get(p.category_id) || 'Uncategorised',
+          track_stock: p.track_stock, studios: perStudio,
+        };
+      });
+      return json({ rows, studios }, corsHeaders);
+    }
+
+    if (action === 'stockSetLevels') {
+      if (!canStock(staff)) return err('Forbidden — stock permission required', corsHeaders, 403);
+      const { productId, studio, minStock, reorderQty, trackStock } = body;
+      if (!isNonEmptyString(productId) || !isNonEmptyString(studio)) return err('Missing productId or studio', corsHeaders);
+      if (!canAccessStudio(staff, studio)) return err('No access to this studio', corsHeaders, 403);
+      if (isBoolean(trackStock)) {
+        await supabase.from('epos_products').update({ track_stock: trackStock }).eq('id', productId);
+      }
+      const { data, error } = await supabase.from('epos_stock').upsert({
+        product_id: productId, studio,
+        min_stock: isNumber(minStock) && minStock >= 0 ? Math.floor(minStock) : 0,
+        reorder_qty: isNumber(reorderQty) && reorderQty >= 0 ? Math.floor(reorderQty) : 0,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'product_id,studio' }).select().single();
+      if (error) throw error;
+      await logAudit(supabase, staff, 'stock_levels', 'epos_product', productId, { studio, minStock, reorderQty, trackStock });
+      return json({ stock: data }, corsHeaders);
+    }
+
+    if (action === 'stockReceive') {
+      if (!canStock(staff)) return err('Forbidden — stock permission required', corsHeaders, 403);
+      const { studio, items, note } = body;
+      if (!isNonEmptyString(studio) || !canAccessStudio(staff, studio)) return err('Invalid or inaccessible studio', corsHeaders, 403);
+      if (!Array.isArray(items) || items.length === 0) return err('No items to receive', corsHeaders);
+      const clean: { productId: string; qty: number }[] = [];
+      for (const it of items) {
+        if (!isObject(it) || !isNonEmptyString(it.productId) || !isNumber(it.qty) || it.qty <= 0) {
+          return err('Each item needs a productId and positive qty', corsHeaders);
+        }
+        clean.push({ productId: it.productId, qty: Math.floor(it.qty) });
+      }
+      const { data: prods } = await supabase.from('epos_products').select('id').in('id', clean.map((i) => i.productId));
+      if ((prods || []).length !== new Set(clean.map((i) => i.productId)).size) return err('Unknown product in receipt', corsHeaders, 404);
+      const { data: receiptId, error } = await supabase.rpc('epos_receive_stock' as never, {
+        p_studio: studio, p_items: clean, p_note: typeof note === 'string' ? note.slice(0, 200) : null,
+        p_staff: staff.id, p_staff_name: staff.name,
+      } as never);
+      if (error) throw error;
+      await logAudit(supabase, staff, 'stock_receive', 'epos_receipt', receiptId as string, { studio, lines: clean.length });
+      return json({ receiptId }, corsHeaders);
+    }
+
+    if (action === 'stockAdjust') {
+      if (!canStock(staff)) return err('Forbidden — stock permission required', corsHeaders, 403);
+      const { studio, productId, changeQty, reason } = body;
+      if (!isNonEmptyString(studio) || !canAccessStudio(staff, studio)) return err('Invalid or inaccessible studio', corsHeaders, 403);
+      if (!isNonEmptyString(productId) || !isNumber(changeQty) || !Number.isInteger(changeQty) || changeQty === 0) {
+        return err('Missing productId or non-zero integer changeQty', corsHeaders);
+      }
+      if (!isNonEmptyString(reason)) return err('A reason is required', corsHeaders);
+      const { data: newQty, error } = await supabase.rpc('epos_apply_stock_movement' as never, {
+        p_product: productId, p_studio: studio, p_change: changeQty, p_type: 'adjust',
+        p_reason: reason.slice(0, 200), p_staff: staff.id, p_staff_name: staff.name,
+      } as never);
+      if (error) throw error;
+      await logAudit(supabase, staff, 'stock_adjust', 'epos_product', productId, { studio, changeQty, reason });
+      return json({ quantity: newQty }, corsHeaders);
+    }
+
+    if (action === 'stockTransfer') {
+      if (!canStock(staff)) return err('Forbidden — stock permission required', corsHeaders, 403);
+      const { productId, fromStudio, toStudio, qty, note } = body;
+      if (!isNonEmptyString(productId) || !isNonEmptyString(fromStudio) || !isNonEmptyString(toStudio)) {
+        return err('Missing productId or studios', corsHeaders);
+      }
+      if (!isNumber(qty) || qty <= 0) return err('Quantity must be positive', corsHeaders);
+      if (!canAccessStudio(staff, fromStudio) || !canAccessStudio(staff, toStudio)) {
+        return err('No access to one of the studios', corsHeaders, 403);
+      }
+      const { data: transferId, error } = await supabase.rpc('epos_transfer_stock' as never, {
+        p_product: productId, p_from: fromStudio, p_to: toStudio, p_qty: Math.floor(qty),
+        p_note: typeof note === 'string' ? note.slice(0, 200) : null,
+        p_staff: staff.id, p_staff_name: staff.name,
+      } as never);
+      if (error) throw error;
+      await logAudit(supabase, staff, 'stock_transfer', 'epos_product', productId, { fromStudio, toStudio, qty });
+      return json({ transferId }, corsHeaders);
+    }
+
+    if (action === 'stockMovements') {
+      const { studio, productId, type, from, to, limit } = body;
+      let q = supabase.from('epos_stock_movements')
+        .select('*, epos_products(name)')
+        .order('created_at', { ascending: false })
+        .limit(isNumber(limit) ? Math.min(Math.floor(limit), 500) : 200);
+      if (isNonEmptyString(studio) && studio !== 'all') {
+        if (!canAccessStudio(staff, studio)) return err('No access to this studio', corsHeaders, 403);
+        q = q.eq('studio', studio);
+      } else if (staff.role !== 'super_admin' && Array.isArray(staff.allowed_studios) && staff.allowed_studios.length > 0) {
+        q = q.in('studio', staff.allowed_studios);
+      }
+      if (isNonEmptyString(productId)) q = q.eq('product_id', productId);
+      if (isNonEmptyString(type) && STOCK_MOVEMENT_TYPES.includes(type)) q = q.eq('type', type);
+      if (isNonEmptyString(from)) q = q.gte('created_at', `${from}T00:00:00Z`);
+      if (isNonEmptyString(to)) q = q.lte('created_at', `${to}T23:59:59Z`);
+      const { data, error } = await q;
+      if (error) throw error;
+      return json({ movements: data || [] }, corsHeaders);
+    }
+
+    if (action === 'stockReorderList') {
+      const { studio } = body;
+      if (!isNonEmptyString(studio) || !canAccessStudio(staff, studio)) return err('Invalid or inaccessible studio', corsHeaders, 403);
+      const { data: rows } = await supabase.from('epos_stock')
+        .select('*, epos_products(name, sku, price, active, track_stock, category_id)')
+        .eq('studio', studio);
+      const low = (rows || []).filter((r) => {
+        const p = r.epos_products as { active?: boolean; track_stock?: boolean } | null;
+        if (!p?.active || !p?.track_stock) return false;
+        return r.quantity < 0 || (r.min_stock > 0 && r.quantity <= r.min_stock);
+      });
+      return json({ reorder: low }, corsHeaders);
+    }
+
+    if (action === 'stocktakeSubmit') {
+      if (!canStock(staff)) return err('Forbidden — stock permission required', corsHeaders, 403);
+      const { studio, counts, note } = body;
+      if (!isNonEmptyString(studio) || !canAccessStudio(staff, studio)) return err('Invalid or inaccessible studio', corsHeaders, 403);
+      if (!Array.isArray(counts) || counts.length === 0) return err('No counts supplied', corsHeaders);
+      const clean: { productId: string; counted: number }[] = [];
+      for (const c of counts) {
+        if (!isObject(c) || !isNonEmptyString(c.productId) || !isNumber(c.counted) || c.counted < 0) {
+          return err('Each count needs productId and counted >= 0', corsHeaders);
+        }
+        clean.push({ productId: c.productId, counted: Math.floor(c.counted) });
+      }
+      const { data: stockRows } = await supabase.from('epos_stock').select('product_id,quantity')
+        .eq('studio', studio).in('product_id', clean.map((c) => c.productId));
+      const expected = new Map((stockRows || []).map((s) => [s.product_id, s.quantity]));
+
+      const { data: st, error: stErr } = await supabase.from('epos_stocktakes').insert({
+        studio, note: typeof note === 'string' ? note.slice(0, 200) : null,
+        staff_id: staff.id, staff_name: staff.name,
+      }).select().single();
+      if (stErr) throw stErr;
+
+      let differences = 0;
+      for (const c of clean) {
+        const exp = expected.get(c.productId) ?? 0;
+        const diff = c.counted - exp;
+        const { error } = await supabase.from('epos_stocktake_items').insert({
+          stocktake_id: st.id, product_id: c.productId, expected_qty: exp, counted_qty: c.counted, difference: diff,
+        });
+        if (error) throw error;
+        if (diff !== 0) {
+          differences++;
+          const { error: mErr } = await supabase.rpc('epos_apply_stock_movement' as never, {
+            p_product: c.productId, p_studio: studio, p_change: diff, p_type: 'stocktake',
+            p_reason: `Stocktake ${new Date().toISOString().slice(0, 10)}`, p_stocktake: st.id,
+            p_staff: staff.id, p_staff_name: staff.name,
+          } as never);
+          if (mErr) throw mErr;
+        }
+      }
+      await logAudit(supabase, staff, 'stocktake', 'epos_stocktake', st.id, { studio, lines: clean.length, differences });
+      return json({ stocktakeId: st.id, lines: clean.length, differences }, corsHeaders);
+    }
+
+    if (action === 'stocktakeList') {
+      const { studio } = body;
+      let q = supabase.from('epos_stocktakes')
+        .select('*, epos_stocktake_items(*, epos_products(name))')
+        .order('created_at', { ascending: false }).limit(50);
+      if (isNonEmptyString(studio) && studio !== 'all') {
+        if (!canAccessStudio(staff, studio)) return err('No access to this studio', corsHeaders, 403);
+        q = q.eq('studio', studio);
+      } else if (staff.role !== 'super_admin' && Array.isArray(staff.allowed_studios) && staff.allowed_studios.length > 0) {
+        q = q.in('studio', staff.allowed_studios);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      return json({ stocktakes: data || [] }, corsHeaders);
+    }
+
+    // Combined sales + stock report — super_admin only.
+    if (action === 'stockReport') {
+      if (staff.role !== 'super_admin') return err('Forbidden — super admin only', corsHeaders, 403);
+      const { studio, from, to, categoryId, productId } = body;
+      const fromIso = isNonEmptyString(from) ? `${from}T00:00:00Z` : new Date(Date.now() - 90 * 864e5).toISOString();
+      const toIso = isNonEmptyString(to) ? `${to}T23:59:59Z` : new Date().toISOString();
+
+      let oq = supabase.from('epos_orders').select('id,studio,status,created_at')
+        .gte('created_at', fromIso).lte('created_at', toIso).eq('status', 'paid');
+      if (isNonEmptyString(studio) && studio !== 'all') oq = oq.eq('studio', studio);
+      const { data: orders } = await oq;
+      const orderIds = (orders || []).map((o) => o.id);
+      const orderStudio = new Map((orders || []).map((o) => [o.id, o.studio]));
+
+      let iq = supabase.from('epos_order_items').select('order_id,product_id,name,quantity,line_total');
+      if (orderIds.length) iq = iq.in('order_id', orderIds);
+      else return json({ products: [], byStudio: {}, movements: [] }, corsHeaders);
+      if (isNonEmptyString(productId)) iq = iq.eq('product_id', productId);
+      const { data: items } = await iq;
+
+      let mq = supabase.from('epos_stock_movements').select('product_id,studio,change_qty,type,reason,created_at')
+        .gte('created_at', fromIso).lte('created_at', toIso);
+      if (isNonEmptyString(studio) && studio !== 'all') mq = mq.eq('studio', studio);
+      if (isNonEmptyString(productId)) mq = mq.eq('product_id', productId);
+      const { data: movements } = await mq;
+
+      const [{ data: products }, { data: cats }] = await Promise.all([
+        supabase.from('epos_products').select('id,name,sku,price,category_id,image_url'),
+        supabase.from('epos_categories').select('id,name'),
+      ]);
+      const catName = new Map((cats || []).map((c) => [c.id, c.name]));
+      const prodInfo = new Map((products || []).map((p) => [p.id, p]));
+
+      const agg = new Map<string, {
+        product_id: string; name: string; category: string; qty_sold: number; revenue: number;
+        by_studio: Record<string, { qty: number; revenue: number }>;
+        received: number; breakages: number; adjustments: number; transfers_in: number; transfers_out: number; stocktake: number;
+      }>();
+      const touch = (pid: string) => {
+        if (!agg.has(pid)) {
+          const p = prodInfo.get(pid);
+          agg.set(pid, {
+            product_id: pid, name: p?.name || 'Unknown', category: catName.get(p?.category_id) || 'Other',
+            qty_sold: 0, revenue: 0, by_studio: {}, received: 0, breakages: 0, adjustments: 0,
+            transfers_in: 0, transfers_out: 0, stocktake: 0,
+          });
+        }
+        return agg.get(pid)!;
+      };
+
+      for (const i of items || []) {
+        if (!i.product_id) continue;
+        const p = prodInfo.get(i.product_id);
+        if (isNonEmptyString(categoryId) && p?.category_id !== categoryId) continue;
+        const a = touch(i.product_id);
+        const st = orderStudio.get(i.order_id) || '';
+        a.qty_sold += i.quantity;
+        a.revenue += Number(i.line_total);
+        a.by_studio[st] = a.by_studio[st] || { qty: 0, revenue: 0 };
+        a.by_studio[st].qty += i.quantity;
+        a.by_studio[st].revenue += Number(i.line_total);
+      }
+      for (const m of movements || []) {
+        const p = prodInfo.get(m.product_id);
+        if (isNonEmptyString(categoryId) && p?.category_id !== categoryId) continue;
+        const a = touch(m.product_id);
+        const d = Number(m.change_qty);
+        if (m.type === 'receive') a.received += d;
+        else if (m.type === 'transfer_in') a.transfers_in += d;
+        else if (m.type === 'transfer_out') a.transfers_out += -d;
+        else if (m.type === 'stocktake') a.stocktake += d;
+        else if (m.type === 'adjust') {
+          a.adjustments += d;
+          if (['breakage', 'damaged', 'missing'].includes(String(m.reason).toLowerCase()) && d < 0) a.breakages += -d;
+        }
+      }
+
+      const byStudio: Record<string, { qty: number; revenue: number }> = {};
+      for (const i of items || []) {
+        const st = orderStudio.get(i.order_id) || 'Unknown';
+        byStudio[st] = byStudio[st] || { qty: 0, revenue: 0 };
+        byStudio[st].qty += i.quantity;
+        byStudio[st].revenue += Number(i.line_total);
+      }
+
+      const rows = [...agg.values()].sort((x, y) => y.qty_sold - x.qty_sold);
+      return json({ products: rows, byStudio }, corsHeaders);
     }
 
     // ---------- Reporting ----------

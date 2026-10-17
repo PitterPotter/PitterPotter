@@ -213,6 +213,7 @@ struct EditStaffView: View {
     @State private var canEposRefunds = false
     @State private var canEposDiscounts = false
     @State private var canEposManageProducts = false
+    @State private var canEposStock = false
     @State private var allowedPutney = false
     @State private var allowedWimbledon = false
 
@@ -253,6 +254,8 @@ struct EditStaffView: View {
                     Toggle("EPOS Refunds", isOn: $canEposRefunds)
                         .disabled(isSuperAdmin)
                     Toggle("EPOS Product Management", isOn: $canEposManageProducts)
+                        .disabled(isSuperAdmin)
+                    Toggle("EPOS Stock Management", isOn: $canEposStock)
                         .disabled(isSuperAdmin)
                 }
 
@@ -306,6 +309,7 @@ struct EditStaffView: View {
             canEposRefunds = member.canEposRefunds
             canEposDiscounts = member.canEposDiscounts
             canEposManageProducts = member.canEposManageProducts
+            canEposStock = member.canEposStock
             if let studios = member.allowedStudios {
                 allowedPutney = studios.contains("Putney")
                 allowedWimbledon = studios.contains("Wimbledon")
@@ -341,6 +345,7 @@ struct EditStaffView: View {
             canEposRefunds: isSuperAdmin || canEposRefunds,
             canEposDiscounts: isSuperAdmin || canEposDiscounts,
             canEposManageProducts: isSuperAdmin || canEposManageProducts,
+            canEposStock: isSuperAdmin || canEposStock,
             allowedStudios: studios,
             createdAt: nil
         )

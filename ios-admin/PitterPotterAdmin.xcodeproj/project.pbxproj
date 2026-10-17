@@ -13,6 +13,7 @@
 		4EE74FA8 /* FloorPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879322B0 /* FloorPlanView.swift */; };
 		E2C58907415041E09AFD787B /* EposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 883C7B02A7C54C2F9BAD8C60 /* EposView.swift */; };
 		BD57BDFA6DED48899B9C8325 /* EposManageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93B3693B597A42E288711E29 /* EposManageView.swift */; };
+		22C00C5CF4874A6F975ECC2D /* EposStockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B79C196829164DB2A9C8F9DB /* EposStockView.swift */; };
 		56B6F3661DEB409CB3897C68 /* Montserrat-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1B9D578E4949434298145A4A /* Montserrat-Bold.ttf */; };
 		6A50D01CABE34FB8BCF4AFED /* DMSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 869516693FDD4814BDF84579 /* DMSans-Bold.ttf */; };
 		7CE5818DF08946D1AD2FD4A3 /* DMSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 39C43AF008944907BBC0207B /* DMSans-Medium.ttf */; };
@@ -86,6 +87,7 @@
 		879322B0 /* FloorPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloorPlanView.swift; sourceTree = "<group>"; };
 		883C7B02A7C54C2F9BAD8C60 /* EposView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EposView.swift; sourceTree = "<group>"; };
 		93B3693B597A42E288711E29 /* EposManageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EposManageView.swift; sourceTree = "<group>"; };
+		B79C196829164DB2A9C8F9DB /* EposStockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EposStockView.swift; sourceTree = "<group>"; };
 		95740503475149A3BEAD655B /* ImageModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageModal.swift; sourceTree = "<group>"; };
 		980F79026893466DAB9B34A8 /* DMSans-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "DMSans-Regular.ttf"; sourceTree = "<group>"; };
 		98CAF264E9EE4B1DAB331ABC /* Montserrat-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file.ttf; path = "Montserrat-Medium.ttf"; sourceTree = "<group>"; };
@@ -241,6 +243,7 @@
 				879322B0 /* FloorPlanView.swift */,
 				883C7B02A7C54C2F9BAD8C60 /* EposView.swift */,
 				93B3693B597A42E288711E29 /* EposManageView.swift */,
+				B79C196829164DB2A9C8F9DB /* EposStockView.swift */,
 				392EFF99 /* DocumentationView.swift */,
 				A20032 /* AdminSettingsView.swift */,
 				A20033 /* CreateGiftCardView.swift */,
@@ -397,6 +400,7 @@
 				4EE74FA8 /* FloorPlanView.swift in Sources */,
 				E2C58907415041E09AFD787B /* EposView.swift in Sources */,
 				BD57BDFA6DED48899B9C8325 /* EposManageView.swift in Sources */,
+				22C00C5CF4874A6F975ECC2D /* EposStockView.swift in Sources */,
 				236A96FF /* DocumentationView.swift in Sources */,
 				A10031 /* AdminSettingsView.swift in Sources */,
 				A10032 /* CreateGiftCardView.swift in Sources */,

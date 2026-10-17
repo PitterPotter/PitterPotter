@@ -49,6 +49,23 @@ enum CSVExporter {
         saveCSV(rows.joined(separator: "\n"), filename: "gift_cards_\(todayString()).csv")
     }
 
+    static func exportStockReport(rows: [StockReportRow]) {
+        let headers = ["product", "category", "qty_sold", "revenue", "putney_qty", "putney_rev", "wimbledon_qty", "wimbledon_rev", "received", "breakages", "adjustments", "transfers_in", "transfers_out", "stocktake_diff"]
+        var lines: [String] = [headers.joined(separator: ",")]
+        for p in rows {
+            let put = p.by_studio["Putney"]
+            let wim = p.by_studio["Wimbledon"]
+            lines.append([
+                escape(p.name), escape(p.category), String(p.qty_sold), String(format: "%.2f", p.revenue),
+                String(put?.qty ?? 0), String(format: "%.2f", put?.revenue ?? 0),
+                String(wim?.qty ?? 0), String(format: "%.2f", wim?.revenue ?? 0),
+                String(p.received), String(p.breakages), String(p.adjustments),
+                String(p.transfers_in), String(p.transfers_out), String(p.stocktake),
+            ].joined(separator: ","))
+        }
+        saveCSV(lines.joined(separator: "\n"), filename: "stock_report_\(todayString()).csv")
+    }
+
     private static func escape(_ value: String) -> String {
         if value.contains(",") || value.contains("\"") || value.contains("\n") {
             return "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""

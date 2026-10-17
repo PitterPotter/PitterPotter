@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { format, parseISO, isToday, isFuture, isPast, differenceInCalendarDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import { Calendar, Users, Clock, Package, Check, Camera, Gift, TrendingUp, ChevronRight, MapPin, DollarSign } from 'lucide-react';
+import { Calendar, Users, Clock, Package, Check, Camera, Gift, TrendingUp, ChevronRight, MapPin, DollarSign, AlertTriangle } from 'lucide-react';
 import { BookingInquiry, GiftCard } from '../../types';
+import type { ReorderRow } from '../../lib/epos';
 import { resolveStage, CollectionStage } from './CollectionsTab';
 
 interface DashboardSummaryProps {
@@ -16,6 +17,8 @@ interface DashboardSummaryProps {
   onNavigateToReady: () => void;
   onNavigateToCollected: () => void;
   onNavigateToAddBooking: () => void;
+  lowStock?: ReorderRow[];
+  onNavigateToStock?: () => void;
 }
 
 const STAGE_LABEL: Record<CollectionStage, string> = {
@@ -42,6 +45,8 @@ export default function DashboardSummary({
   onNavigateToReady,
   onNavigateToCollected,
   onNavigateToAddBooking,
+  lowStock,
+  onNavigateToStock,
 }: DashboardSummaryProps) {
 
   const scopedBookings = useMemo(() => {
@@ -294,6 +299,39 @@ export default function DashboardSummary({
               <p className="text-[10px] font-semibold text-amber-700/70 pt-1">
                 +{stats.noPhotoAlerts.length - 4} more…
               </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Low-stock alerts */}
+      {lowStock && lowStock.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4" /> {lowStock.length} product{lowStock.length !== 1 ? 's' : ''} low on stock
+            </h3>
+            {onNavigateToStock && (
+              <button
+                onClick={onNavigateToStock}
+                className="text-[10px] font-bold uppercase tracking-wider text-amber-800 hover:text-amber-900 cursor-pointer flex items-center gap-0.5"
+              >
+                Go to Stock <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {lowStock.slice(0, 4).map(r => (
+              <div key={`${r.product_id}-${r.studio}`} className="flex items-center gap-3 py-1">
+                <span className="text-xs font-black text-amber-900 truncate flex-1">{r.epos_products?.name || '—'}</span>
+                <span className="text-[10px] font-bold text-amber-700/70 shrink-0">{r.studio}</span>
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${r.quantity <= 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {r.quantity <= 0 ? 'OUT' : `${r.quantity} left`}
+                </span>
+              </div>
+            ))}
+            {lowStock.length > 4 && (
+              <p className="text-[10px] font-semibold text-amber-700/70 pt-1">+{lowStock.length - 4} more…</p>
             )}
           </div>
         </div>

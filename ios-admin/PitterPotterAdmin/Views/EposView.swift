@@ -6,10 +6,12 @@ import WebKit
 struct EposView: View {
     @EnvironmentObject var authVM: AuthViewModel
     @EnvironmentObject var bookingsVM: BookingsViewModel
+    @EnvironmentObject var toastManager: ToastManager
 
     @State private var categories: [EposCategory] = []
     @State private var products: [EposProduct] = []
     @State private var discounts: [EposDiscount] = []
+    @State private var stock: [String: StockLevel] = [:]
     @State private var cardProvider = "mock"
     @State private var tables: [EposTable] = []
     @State private var openOrders: [EposOrder] = []
@@ -212,7 +214,20 @@ struct EposView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(p.name).font(AppFont.body(13, weight: .bold)).foregroundStyle(PPBrand.charcoal).lineLimit(2)
                             Spacer(minLength: 0)
-                            Text(money(p.price)).font(AppFont.heading(15)).foregroundStyle(PPBrand.charcoal)
+                            HStack(spacing: 4) {
+                                Text(money(p.price)).font(AppFont.heading(15)).foregroundStyle(PPBrand.charcoal)
+                                if p.tracksStock, let s = stock[p.id] {
+                                    if s.quantity <= 0 {
+                                        Text("0 left").font(AppFont.body(8, weight: .black)).textCase(.uppercase)
+                                            .padding(.horizontal, 5).padding(.vertical, 2)
+                                            .background(Color(hex: 0xFEE2E2)).foregroundStyle(Color(hex: 0xB91C1C)).clipShape(RoundedRectangle(cornerRadius: 4))
+                                    } else if s.min_stock > 0 && s.quantity <= s.min_stock {
+                                        Text("\(s.quantity) left").font(AppFont.body(8, weight: .black)).textCase(.uppercase)
+                                            .padding(.horizontal, 5).padding(.vertical, 2)
+                                            .background(Color(hex: 0xFEF3C7)).foregroundStyle(Color(hex: 0x92400E)).clipShape(RoundedRectangle(cornerRadius: 4))
+                                    }
+                                }
+                            }
                         }
                         .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
                         .padding(10)
@@ -699,7 +714,7 @@ struct EposView: View {
         guard let staff = authVM.staff else { return }
         do {
             let b = try await APIClient.shared.eposBootstrap(studio: tillStudio, staff: staff)
-            categories = b.categories; products = b.products; discounts = b.discounts; cardProvider = b.cardProvider
+            categories = b.categories; products = b.products; discounts = b.discounts; cardProvider = b.cardProvider; stock = b.stock ?? [:]
             async let t = APIClient.shared.eposListTables(studio: tillStudio, staff: staff)
             async let o = APIClient.shared.eposOpenOrders(studio: tillStudio, staff: staff)
             tables = try await t; openOrders = try await o
@@ -761,6 +776,14 @@ struct EposView: View {
 
     private func addProduct(_ p: EposProduct) async {
         guard let staff = authVM.staff, let o = order else { errorMsg = "Select or create an order first"; return }
+        // Warn-but-allow: flag low/empty stock but never block the sale.
+        if p.tracksStock, let s = stock[p.id] {
+            if s.quantity <= 0 {
+                toastManager.error("\(p.name): no stock recorded — check shelf/Stock tab")
+            } else if s.min_stock > 0 && s.quantity <= s.min_stock {
+                toastManager.error("\(p.name) is at/below minimum stock (\(s.quantity) left)")
+            }
+        }
         busy = true
         do {
             order = try await APIClient.shared.eposAddItem(orderId: o.id, productId: p.id, staff: staff)

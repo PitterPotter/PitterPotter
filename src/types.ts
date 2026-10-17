@@ -96,6 +96,7 @@ export interface Staff {
   canEposRefunds?: boolean;
   canEposDiscounts?: boolean;
   canEposManageProducts?: boolean;
+  canEposStock?: boolean;
   allowedStudios?: ('Putney' | 'Wimbledon')[];
   sessionToken?: string;
   sessionExpiresAt?: string;
@@ -142,6 +143,7 @@ export interface StaffApiRow {
   can_epos_refunds?: boolean;
   can_epos_discounts?: boolean;
   can_epos_manage_products?: boolean;
+  can_epos_stock?: boolean;
   allowed_studios?: ('Putney' | 'Wimbledon')[];
   created_at: string;
 }
@@ -184,6 +186,7 @@ export interface EposProduct {
   image_url: string | null;
   studios: EposStudio[];
   active: boolean;
+  track_stock?: boolean;
   sort_order: number;
 }
 

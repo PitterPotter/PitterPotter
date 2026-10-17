@@ -285,6 +285,7 @@ actor APIClient {
                 "canEposRefunds": member.canEposRefunds,
                 "canEposDiscounts": member.canEposDiscounts,
                 "canEposManageProducts": member.canEposManageProducts,
+                "canEposStock": member.canEposStock,
                 "allowedStudios": member.allowedStudios ?? [],
             ],
         ]
@@ -320,6 +321,7 @@ actor APIClient {
             "canEposRefunds": member.canEposRefunds,
             "canEposDiscounts": member.canEposDiscounts,
             "canEposManageProducts": member.canEposManageProducts,
+            "canEposStock": member.canEposStock,
             "allowedStudios": member.allowedStudios ?? [],
         ]
         if let pw = password, !pw.isEmpty {
@@ -1673,6 +1675,87 @@ actor APIClient {
         if let from { extra["from"] = from }
         if let to { extra["to"] = to }
         return try await eposCall(action: "salesReport", staff: staff, extra: extra)
+    }
+
+    // MARK: - Stock & inventory
+
+    func eposStockOverview(studio: String, staff: Staff) async throws -> StockOverviewResponse {
+        try await eposCall(action: "stockOverview", staff: staff, extra: ["studio": studio])
+    }
+
+    func eposStockSetLevels(productId: String, studio: String, minStock: Int, reorderQty: Int, trackStock: Bool, staff: Staff) async throws {
+        struct R: Codable { let stock: StockLevel }
+        let _: R = try await eposCall(action: "stockSetLevels", staff: staff, extra: [
+            "productId": productId, "studio": studio, "minStock": minStock, "reorderQty": reorderQty, "trackStock": trackStock,
+        ])
+    }
+
+    func eposStockReceive(studio: String, items: [[String: Any]], note: String?, staff: Staff) async throws {
+        struct R: Codable { let receiptId: String }
+        var extra: [String: Any] = ["studio": studio, "items": items]
+        if let note { extra["note"] = note }
+        let _: R = try await eposCall(action: "stockReceive", staff: staff, extra: extra)
+    }
+
+    func eposStockAdjust(studio: String, productId: String, changeQty: Int, reason: String, staff: Staff) async throws -> Int {
+        struct R: Codable { let quantity: Int }
+        let r: R = try await eposCall(action: "stockAdjust", staff: staff, extra: [
+            "studio": studio, "productId": productId, "changeQty": changeQty, "reason": reason,
+        ])
+        return r.quantity
+    }
+
+    func eposStockTransfer(productId: String, fromStudio: String, toStudio: String, qty: Int, note: String?, staff: Staff) async throws {
+        struct R: Codable { let transferId: String }
+        var extra: [String: Any] = ["productId": productId, "fromStudio": fromStudio, "toStudio": toStudio, "qty": qty]
+        if let note { extra["note"] = note }
+        let _: R = try await eposCall(action: "stockTransfer", staff: staff, extra: extra)
+    }
+
+    func eposStockMovements(studio: String? = nil, productId: String? = nil, type: String? = nil, limit: Int = 300, staff: Staff) async throws -> [StockMovement] {
+        var extra: [String: Any] = ["limit": limit]
+        if let studio { extra["studio"] = studio }
+        if let productId { extra["productId"] = productId }
+        if let type { extra["type"] = type }
+        struct R: Codable { let movements: [StockMovement] }
+        let r: R = try await eposCall(action: "stockMovements", staff: staff, extra: extra)
+        return r.movements
+    }
+
+    func eposStockReorderList(studio: String, staff: Staff) async throws -> [ReorderRow] {
+        struct R: Codable { let reorder: [ReorderRow] }
+        let r: R = try await eposCall(action: "stockReorderList", staff: staff, extra: ["studio": studio])
+        return r.reorder
+    }
+
+    func eposStocktakeSubmit(studio: String, counts: [[String: Any]], note: String?, staff: Staff) async throws -> Int {
+        struct R: Codable { let stocktakeId: String; let lines: Int; let differences: Int }
+        var extra: [String: Any] = ["studio": studio, "counts": counts]
+        if let note { extra["note"] = note }
+        let r: R = try await eposCall(action: "stocktakeSubmit", staff: staff, extra: extra)
+        return r.differences
+    }
+
+    func eposStocktakeList(studio: String? = nil, staff: Staff) async throws -> [Stocktake] {
+        var extra: [String: Any] = [:]
+        if let studio { extra["studio"] = studio }
+        struct R: Codable { let stocktakes: [Stocktake] }
+        let r: R = try await eposCall(action: "stocktakeList", staff: staff, extra: extra)
+        return r.stocktakes
+    }
+
+    struct StockReportResponse: Codable {
+        let products: [StockReportRow]
+        let byStudio: [String: StockReportRow.StudioSales]
+    }
+
+    func eposStockReport(studio: String? = nil, from: String? = nil, to: String? = nil, categoryId: String? = nil, staff: Staff) async throws -> StockReportResponse {
+        var extra: [String: Any] = [:]
+        if let studio { extra["studio"] = studio }
+        if let from { extra["from"] = from }
+        if let to { extra["to"] = to }
+        if let categoryId { extra["categoryId"] = categoryId }
+        return try await eposCall(action: "stockReport", staff: staff, extra: extra)
     }
 }
 

@@ -209,6 +209,7 @@ struct WebTabBar: View {
         t.append((.allFiles, "All Files", nil))
         t.append((.scan, "Scan QR", nil))
         t.append((.epos, "Till", nil))
+        t.append((.stock, "Stock", nil))
         t.append((.floorPlan, "Floor Plan", nil))
         t.append((.giftCards, "Gift Vouchers", nil))
         if isSuperAdmin {

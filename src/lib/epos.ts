@@ -27,6 +27,7 @@ export interface EposBootstrap {
   categories: EposCategory[];
   products: EposProduct[];
   discounts: EposDiscount[];
+  stock: Record<string, { quantity: number; min_stock: number }>;
   cardProvider: 'mock' | 'dojo';
 }
 
@@ -159,3 +160,111 @@ export interface EposSalesReport {
 }
 export const eposSalesReport = (staff: StaffAuth, args: { studio?: string; from?: string; to?: string }) =>
   callEpos<EposSalesReport>(staff, 'salesReport', args);
+
+// ---------- Stock & inventory ----------
+export interface StockStudioInfo {
+  quantity: number;
+  min_stock: number;
+  reorder_qty: number;
+  qty_sold: number;
+  revenue: number;
+  low: boolean;
+}
+export interface StockRow {
+  id: string;
+  name: string;
+  sku: string | null;
+  price: number;
+  image_url: string | null;
+  category_id: string | null;
+  category: string;
+  track_stock: boolean;
+  studios: Record<string, StockStudioInfo>;
+}
+export const eposStockOverview = (staff: StaffAuth, studio: string) =>
+  callEpos<{ rows: StockRow[]; studios: string[] }>(staff, 'stockOverview', { studio });
+
+export const eposStockSetLevels = (staff: StaffAuth, args: {
+  productId: string; studio: string; minStock?: number; reorderQty?: number; trackStock?: boolean;
+}) => callEpos<{ stock: { quantity: number; min_stock: number; reorder_qty: number } }>(staff, 'stockSetLevels', args);
+
+export const eposStockReceive = (staff: StaffAuth, args: {
+  studio: string; items: { productId: string; qty: number }[]; note?: string;
+}) => callEpos<{ receiptId: string }>(staff, 'stockReceive', args);
+
+export const eposStockAdjust = (staff: StaffAuth, args: {
+  studio: string; productId: string; changeQty: number; reason: string;
+}) => callEpos<{ quantity: number }>(staff, 'stockAdjust', args);
+
+export const eposStockTransfer = (staff: StaffAuth, args: {
+  productId: string; fromStudio: string; toStudio: string; qty: number; note?: string;
+}) => callEpos<{ transferId: string }>(staff, 'stockTransfer', args);
+
+export interface StockMovement {
+  id: string;
+  product_id: string;
+  studio: string;
+  change_qty: number;
+  type: 'sale' | 'receive' | 'transfer_out' | 'transfer_in' | 'adjust' | 'stocktake';
+  reason: string | null;
+  order_id: string | null;
+  staff_name: string | null;
+  quantity_after: number;
+  created_at: string;
+  epos_products?: { name: string } | null;
+}
+export const eposStockMovements = (staff: StaffAuth, args: {
+  studio?: string; productId?: string; type?: string; from?: string; to?: string; limit?: number;
+}) => callEpos<{ movements: StockMovement[] }>(staff, 'stockMovements', args);
+
+export interface ReorderRow {
+  product_id: string;
+  studio: string;
+  quantity: number;
+  min_stock: number;
+  reorder_qty: number;
+  epos_products: { name: string; sku: string | null; price: number; active: boolean; track_stock: boolean; category_id: string | null } | null;
+}
+export const eposStockReorderList = (staff: StaffAuth, studio: string) =>
+  callEpos<{ reorder: ReorderRow[] }>(staff, 'stockReorderList', { studio });
+
+export const eposStocktakeSubmit = (staff: StaffAuth, args: {
+  studio: string; counts: { productId: string; counted: number }[]; note?: string;
+}) => callEpos<{ stocktakeId: string; lines: number; differences: number }>(staff, 'stocktakeSubmit', args);
+
+export interface StocktakeItem {
+  id: string;
+  product_id: string;
+  expected_qty: number;
+  counted_qty: number;
+  difference: number;
+  epos_products?: { name: string } | null;
+}
+export interface Stocktake {
+  id: string;
+  studio: string;
+  note: string | null;
+  staff_name: string | null;
+  created_at: string;
+  epos_stocktake_items?: StocktakeItem[];
+}
+export const eposStocktakeList = (staff: StaffAuth, studio?: string) =>
+  callEpos<{ stocktakes: Stocktake[] }>(staff, 'stocktakeList', { studio: studio || 'all' });
+
+export interface StockReportRow {
+  product_id: string;
+  name: string;
+  category: string;
+  qty_sold: number;
+  revenue: number;
+  by_studio: Record<string, { qty: number; revenue: number }>;
+  received: number;
+  breakages: number;
+  adjustments: number;
+  transfers_in: number;
+  transfers_out: number;
+  stocktake: number;
+}
+export const eposStockReport = (staff: StaffAuth, args: {
+  studio?: string; from?: string; to?: string; categoryId?: string; productId?: string;
+}) => callEpos<{ products: StockReportRow[]; byStudio: Record<string, { qty: number; revenue: number }> }>(staff, 'stockReport', args);

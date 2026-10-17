@@ -78,6 +78,7 @@ Deno.serve(async (req) => {
         can_epos_refunds: isSuperAdmin || (isBoolean(staffData.canEposRefunds) ? staffData.canEposRefunds : false),
         can_epos_discounts: isSuperAdmin || (isBoolean(staffData.canEposDiscounts) ? staffData.canEposDiscounts : false),
         can_epos_manage_products: isSuperAdmin || (isBoolean(staffData.canEposManageProducts) ? staffData.canEposManageProducts : false),
+        can_epos_stock: isSuperAdmin || (isBoolean(staffData.canEposStock) ? staffData.canEposStock : false),
       };
       const allowedStudios = isSuperAdmin ? null :
         (Array.isArray(staffData.allowedStudios) && staffData.allowedStudios.length > 0 ? staffData.allowedStudios : null);
@@ -116,6 +117,7 @@ Deno.serve(async (req) => {
         can_epos_refunds: isUpdatedSuperAdmin || (isBoolean(staffData.canEposRefunds) ? staffData.canEposRefunds : false),
         can_epos_discounts: isUpdatedSuperAdmin || (isBoolean(staffData.canEposDiscounts) ? staffData.canEposDiscounts : false),
         can_epos_manage_products: isUpdatedSuperAdmin || (isBoolean(staffData.canEposManageProducts) ? staffData.canEposManageProducts : false),
+        can_epos_stock: isUpdatedSuperAdmin || (isBoolean(staffData.canEposStock) ? staffData.canEposStock : false),
         allowed_studios: isUpdatedSuperAdmin ? null :
           (Array.isArray(staffData.allowedStudios) && staffData.allowedStudios.length > 0 ? staffData.allowedStudios : null),
       };
